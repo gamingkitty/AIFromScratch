@@ -24,7 +24,9 @@ def relu(x):
 
 
 def relu_derivative(x):
-    return (x > 0).astype(int)
+    jacobian = np.zeros((len(x), len(x)))
+    np.fill_diagonal(jacobian, (x > 0).astype(int))
+    return jacobian
 
 
 def softmax(x):
@@ -89,8 +91,13 @@ def backwards_pass(z_data, a_data, label, hidden_to_output_weights, input_data):
 
     # dz2_da1 (which is just the hidden_to_output_weights) * da1_dz1 (the derivative of the activation function, relu)
     # Need to exclude last weight, as that is for bias
-    dz2_dz1 = hidden_to_output_weights[:-1, :] * relu_derivative(z_data[0])[:, np.newaxis]
-    dc_dz1 = np.dot(dc_dz2, dz2_dz1.T)
+    dc_da1 = np.dot(dc_dz2, hidden_to_output_weights[:-1, :].T)
+    dc_dz1 = np.dot(dc_da1, relu_derivative(z_data[0]))
+
+    # Old code to calculate dc_dz1, does not consider relu a jacobian. These should be the same, but wanted to experiment
+    # with being able to generalize, so I needed to be able to do it with an activation function whose derivative is a jacobian.
+    # dz2_dz1 = hidden_to_output_weights[:-1, :] * relu_derivative(z_data[0])[:, np.newaxis]
+    # dc_dz1 = np.dot(dc_dz2, dz2_dz1.T)
 
     # The input_data, or z_0, is dz1_dw
     first_layer_gradient = dc_dz1 * input_data[:, np.newaxis]

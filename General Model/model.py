@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 
 
 class Model:
@@ -86,6 +87,7 @@ class Model:
 
         gradient.append(dc_dz * a_data[-2][:, np.newaxis])
 
+        # Continue to chain back the derivative for every hidden layer.
         for i in reversed(range(len(z_data) - 1)):
             dc_da = np.dot(dc_dz, self.weights[i + 1].T)
             dc_dz = np.dot(dc_da, self.layer_activation_function_derivatives[i](z_data[i]))
@@ -128,3 +130,11 @@ class Model:
                 total_correct += 1
         return total_correct / len(data)
 
+    def save(self, filename):
+        with open(filename + ".pkl", "wb") as file:
+            pickle.dump(self, file)
+
+    @classmethod
+    def load(cls, filename):
+        with open(filename + ".pkl", "rb") as file:
+            return pickle.load(file)

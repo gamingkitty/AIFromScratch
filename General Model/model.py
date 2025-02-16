@@ -11,6 +11,8 @@ class Model:
         # Activation functions will take in a list of inputs and output a list of outputs, so with something like ReLU,
         # you would have to make it work when it takes in a list.
         self.layer_activation_functions = []
+        # The derivatives will output a jacobian matrix, so for things like ReLU, the derivative will need to be a
+        # jacobian matrix instead of just a list.
         self.layer_activation_function_derivatives = []
         self.output_num = 0
 
@@ -27,7 +29,8 @@ class Model:
 
                 self.add_hidden_layer(neuron_num, activation_function, activation_function_derivative)
             elif layer_type == "output":
-                self.add_output_layer(neuron_num, activation_function, activation_function_derivative)
+                self.output_num = neuron_num
+                self.add_hidden_layer(neuron_num, activation_function, activation_function_derivative)
             else:
                 raise ValueError(f"Invalid layer type: {layer_type}")
 
@@ -42,15 +45,6 @@ class Model:
         else:
             self.weights.append(np.random.rand(neuron_num, len(self.weights[-1])) - 0.5)
 
-        self.layer_activation_functions.append(activation_function)
-        self.layer_activation_function_derivatives.append(activation_function_derivative)
-
-    def add_output_layer(self, neuron_num, activation_function, activation_function_derivative):
-        if neuron_num <= 0:
-            raise ValueError("Number of neurons in output layer must be 1 or greater")
-
-        self.output_num = neuron_num
-        self.weights.append(np.random.rand(self.output_num, len(self.weights[-1])) - 0.5)
         self.layer_activation_functions.append(activation_function)
         self.layer_activation_function_derivatives.append(activation_function_derivative)
 
@@ -81,24 +75,7 @@ class Model:
         return z_data, a_data
 
     def backwards_propagate(self, input_data, expected_output):
-        z_data, a_data = self.forward_propagate(input_data)
-
-        # Calculate the jacobian matrices to find the gradient later
-        jacobian_matrices = []
-        for i in range(len(self.weights)):
-            jacobian_matrices.append(self.weights[i] * self.layer_activation_function_derivatives[i](z_data[i]))
-
-        # Use the jacobian matrices to find the gradient
         gradient = []
-        for i in range(len(self.weights)):
-            multiplied_jacobian = jacobian_matrices[i]
-            for mat in jacobian_matrices[i + 1:]:
-                multiplied_jacobian = np.dot(multiplied_jacobian, mat)
-
-            # Find da/dw now and multiply it to get the gradient for that layer
-            da_dw = a_data[i] * self.layer_activation_function_derivatives[i](z_data[i + 1])
-            layer_gradient = (-2 / self.output_num) * np.sum((expected_output - a_data[-1]).dot((da_dw * multiplied_jacobian)))
-            gradient.append(layer_gradient)
 
         return gradient
 

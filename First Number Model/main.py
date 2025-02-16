@@ -24,7 +24,7 @@ def relu(x):
 
 
 def relu_derivative(x):
-    return np.maximum(x, 0)
+    return (x > 0).astype(int)
 
 
 def softmax(x):
@@ -39,15 +39,11 @@ def loss(output, label):
 def softmax_derivative(x):
     softmax_vals = softmax(x)
 
-    n = len(x)
-    jacobian = np.zeros((n, n))
+    softmax_outer = np.outer(softmax_vals, softmax_vals)
 
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                jacobian[i, j] = softmax_vals[i] * (1 - softmax_vals[i])
-            else:
-                jacobian[i, j] = -softmax_vals[i] * softmax_vals[j]
+    diagonal_softmax = np.diag(softmax_vals)
+
+    jacobian = diagonal_softmax - softmax_outer
 
     return jacobian
 

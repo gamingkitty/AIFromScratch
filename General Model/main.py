@@ -33,27 +33,30 @@ def main():
     for i in range(len(ohe_test_labels)):
         ohe_test_labels[i][test_labels[i]] = 1
 
-    # ai_model = model.Model.load(save_as)
-    ai_model = model.Model()
-    ai_model.add_layer(784, "input")
-    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    ai_model.add_layer(10, "output", activation_functions.softmax, activation_functions.softmax_derivative)
+    print(train_images[2].shape)
+    print(ohe_train_labels[2])
+
+    ai_model = model.Model.load(save_as)
+    # ai_model = model.Model()
+    # ai_model.add_layer(784, "input")
+    # ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
+    # ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
+    # ai_model.add_layer(10, "output", activation_functions.softmax, activation_functions.softmax_derivative)
 
     accuracy = ai_model.test(test_images, ohe_test_labels)
     print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    ai_model.fit(train_images, ohe_train_labels, 10, 0.01)
-
-    print()
-    accuracy = ai_model.test(test_images, ohe_test_labels)
-    print(f"Final model accuracy is {accuracy * 100}%")
-    print()
-
-    print("Saving model...")
-    ai_model.save(save_as)
-    print(f"Saved model as {save_as}.pkl")
+    # ai_model.fit(train_images, ohe_train_labels, 75, 0.003)
+    #
+    # print()
+    # accuracy = ai_model.test(test_images, ohe_test_labels)
+    # print(f"Final model accuracy is {accuracy * 100}%")
+    # print()
+    #
+    # print("Saving model...")
+    # ai_model.save(save_as)
+    # print(f"Saved model as {save_as}.pkl")
 
 
 if __name__ == "__main__":

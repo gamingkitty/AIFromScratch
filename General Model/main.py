@@ -33,9 +33,6 @@ def main():
     for i in range(len(ohe_test_labels)):
         ohe_test_labels[i][test_labels[i]] = 1
 
-    print(train_images[2].shape)
-    print(ohe_train_labels[2])
-
     ai_model = model.Model.load(save_as)
     # ai_model = model.Model()
     # ai_model.add_layer(784, "input")
@@ -47,8 +44,8 @@ def main():
     print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    # ai_model.fit(train_images, ohe_train_labels, 75, 0.003)
-    #
+    # ai_model.fit(train_images, ohe_train_labels, 1000, 0.01)
+
     # print()
     # accuracy = ai_model.test(test_images, ohe_test_labels)
     # print(f"Final model accuracy is {accuracy * 100}%")

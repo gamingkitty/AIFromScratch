@@ -2,6 +2,21 @@ import pygame
 import model
 import sys
 import numpy as np
+from keras.datasets import mnist
+
+
+def load_data():
+    (train_images_f, train_labels_f), (test_images_f, test_labels_f) = mnist.load_data()
+
+    # Normalize the image data to values between 0 and 1
+    train_images_f = train_images_f.astype('float32') / 255
+    test_images_f = test_images_f.astype('float32') / 255
+
+    # Flatten the images from 28x28 to 784-dimensional vectors
+    train_images_f = train_images_f.reshape((-1, 28*28))
+    test_images_f = test_images_f.reshape((-1, 28*28))
+
+    return train_images_f, train_labels_f, test_images_f, test_labels_f
 
 
 def main():
@@ -20,6 +35,9 @@ def main():
 
     image = np.zeros((28, 28))
 
+    train_images, train_labels, test_images, test_labels = load_data()
+    current_image = 0
+
     pygame.init()
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
 
@@ -37,6 +55,9 @@ def main():
 
     screen_width = screen.get_width()
     screen_height = screen.get_height()
+
+    own_data = []
+    own_labels = []
 
     clock = pygame.time.Clock()
     fps = 60
@@ -93,6 +114,8 @@ def main():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                print(len(own_data))
+                # np.savez("Own Number Dataset/number_data_test.npz", images=own_data, labels=own_labels)
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_held = True
@@ -100,6 +123,20 @@ def main():
                 mouse_held = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_z:
+                    image = np.zeros((28, 28))
+                elif event.key == pygame.K_w:
+                    current_image += 1
+                    image = train_images[current_image].reshape((28, 28)).T
+                elif event.key == pygame.K_s:
+                    current_image -= 1
+                    current_image = max(current_image, 0)
+                    image = train_images[current_image].reshape((28, 28)).T
+                elif pygame.K_0 <= event.key <= pygame.K_9:
+                    number_pressed = event.key - pygame.K_0
+                    ohe_number = np.zeros(10)
+                    ohe_number[number_pressed] = 1
+                    own_data.append(image.T.flatten())
+                    own_labels.append(ohe_number)
                     image = np.zeros((28, 28))
 
         # Update the screen

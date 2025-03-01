@@ -114,7 +114,6 @@ def main():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print(len(own_data))
                 # np.savez("Own Number Dataset/number_data_test.npz", images=own_data, labels=own_labels)
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:

@@ -41,10 +41,11 @@ class Model:
         if neuron_num <= 0:
             raise ValueError("Number of neurons in hidden layer must be 1 or greater")
 
+        # Plus 1 for bias
         if len(self.weights) == 0:
-            self.weights.append(np.random.rand(self.input_num, neuron_num) - 0.5)
+            self.weights.append(np.random.rand(self.input_num + 1, neuron_num) - 0.5)
         else:
-            self.weights.append(np.random.rand(len(self.weights[-1][0]), neuron_num) - 0.5)
+            self.weights.append(np.random.rand(len(self.weights[-1][0]) + 1, neuron_num) - 0.5)
 
         self.layer_activation_functions.append(activation_function)
         self.layer_activation_function_derivatives.append(activation_function_derivative)
@@ -59,11 +60,13 @@ class Model:
         prediction = input_data
 
         for i in range(len(self.weights)):
-            prediction = self.layer_activation_functions[i](np.dot(prediction, self.weights[i]))
+            prediction = self.layer_activation_functions[i](np.dot(np.append(1, prediction), self.weights[i]))
 
         return prediction
 
     def forward_propagate(self, input_data):
+        input_data = np.append(1, input_data)
+
         z_data = []
         # Starts with input_data in it, will be 1 longer than z.
         a_data = [input_data]
@@ -72,6 +75,8 @@ class Model:
         for i in range(len(self.weights)):
             z_data.append(np.dot(last_value, self.weights[i]))
             last_value = self.layer_activation_functions[i](z_data[-1])
+            if i != len(self.weights) - 1:
+                last_value = np.append(1, last_value)
             a_data.append(last_value)
 
         return z_data, a_data
@@ -89,7 +94,7 @@ class Model:
 
         # Continue to chain back the derivative for every hidden layer.
         for i in reversed(range(len(z_data) - 1)):
-            dc_da = np.dot(dc_dz, self.weights[i + 1].T)
+            dc_da = np.dot(dc_dz, self.weights[i + 1][:-1].T)
             dc_dz = np.dot(dc_da, self.layer_activation_function_derivatives[i](z_data[i]))
             gradient.insert(0, dc_dz * a_data[i][:, np.newaxis])
 

@@ -19,7 +19,7 @@ def load_data():
 
 
 def main():
-    save_as = "Models/model"
+    save_as = "Models/model_bias"
 
     train_images, train_labels, test_images, test_labels = load_data()
     possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -33,27 +33,27 @@ def main():
     for i in range(len(ohe_test_labels)):
         ohe_test_labels[i][test_labels[i]] = 1
 
-    ai_model = model.Model.load(save_as)
-    # ai_model = model.Model()
-    # ai_model.add_layer(784, "input")
-    # ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    # ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    # ai_model.add_layer(10, "output", activation_functions.softmax, activation_functions.softmax_derivative)
+    # ai_model = model.Model.load(save_as)
+    ai_model = model.Model()
+    ai_model.add_layer(784, "input")
+    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
+    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
+    ai_model.add_layer(10, "output", activation_functions.softmax, activation_functions.softmax_derivative)
 
     accuracy = ai_model.test(test_images, ohe_test_labels)
     print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    # ai_model.fit(train_images, ohe_train_labels, 1000, 0.01)
+    ai_model.fit(train_images, ohe_train_labels, 75, 0.007)
 
-    # print()
-    # accuracy = ai_model.test(test_images, ohe_test_labels)
-    # print(f"Final model accuracy is {accuracy * 100}%")
-    # print()
-    #
-    # print("Saving model...")
-    # ai_model.save(save_as)
-    # print(f"Saved model as {save_as}.pkl")
+    print()
+    accuracy = ai_model.test(test_images, ohe_test_labels)
+    print(f"Final model accuracy is {accuracy * 100}%")
+    print()
+
+    print("Saving model...")
+    ai_model.save(save_as)
+    print(f"Saved model as {save_as}.pkl")
 
 
 if __name__ == "__main__":

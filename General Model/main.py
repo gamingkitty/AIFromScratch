@@ -1,5 +1,6 @@
 import numpy as np
 import model
+import layers
 import activation_functions
 from keras.datasets import mnist
 
@@ -19,7 +20,7 @@ def load_data():
 
 
 def main():
-    save_as = "Models/model_bias"
+    save_as = "Models/model_test"
 
     train_images, train_labels, test_images, test_labels = load_data()
     possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -34,17 +35,17 @@ def main():
         ohe_test_labels[i][test_labels[i]] = 1
 
     # ai_model = model.Model.load(save_as)
-    ai_model = model.Model()
-    ai_model.add_layer(784, "input")
-    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    ai_model.add_layer(16, "hidden", activation_functions.relu, activation_functions.relu_derivative)
-    ai_model.add_layer(10, "output", activation_functions.softmax, activation_functions.softmax_derivative)
+    ai_model = model.Model(
+        784,
+        layers.Dense(16, activation_functions.relu, activation_functions.relu_derivative),
+        layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative),
+    )
 
     accuracy = ai_model.test(test_images, ohe_test_labels)
     print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    ai_model.fit(train_images, ohe_train_labels, 75, 0.007)
+    ai_model.fit(train_images, ohe_train_labels, 15, 0.01)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

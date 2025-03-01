@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/model")
+    ai_model = model.Model.load("Models/model_bias")
 
     image = np.zeros((28, 28))
 
@@ -114,7 +114,6 @@ def main():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print(len(own_data))
                 # np.savez("Own Number Dataset/number_data_test.npz", images=own_data, labels=own_labels)
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -126,11 +125,11 @@ def main():
                     image = np.zeros((28, 28))
                 elif event.key == pygame.K_w:
                     current_image += 1
-                    image = train_images[current_image].reshape((28, 28)).T
+                    image = test_images[current_image].reshape((28, 28)).T
                 elif event.key == pygame.K_s:
                     current_image -= 1
                     current_image = max(current_image, 0)
-                    image = train_images[current_image].reshape((28, 28)).T
+                    image = test_images[current_image].reshape((28, 28)).T
                 elif pygame.K_0 <= event.key <= pygame.K_9:
                     number_pressed = event.key - pygame.K_0
                     ohe_number = np.zeros(10)

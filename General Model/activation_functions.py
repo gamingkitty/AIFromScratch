@@ -11,6 +11,16 @@ def relu_derivative(x):
     return jacobian
 
 
+def tanh(x):
+    return np.tanh(x)
+
+
+def tanh_derivative(x):
+    jacobian = np.zeros((len(x), len(x)))
+    np.fill_diagonal(jacobian, 1 - np.tanh(x) ** 2)
+    return jacobian
+
+
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()

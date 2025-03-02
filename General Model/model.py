@@ -3,15 +3,19 @@ import pickle
 
 
 class Model:
-    def __init__(self, input_num, *layers):
-        self.input_num = input_num
-        self.layers = layers
-        prev_neuron_num = input_num
-        for layer in self.layers:
-            layer.init_weights(prev_neuron_num)
-            prev_neuron_num = layer.neuron_num
+    def __init__(self, input_shape, *layers):
+        self.input_shape = input_shape
+        self.input_num = np.prod(input_shape)
 
-        self.output_num = prev_neuron_num
+        self.layers = layers
+
+        prev_output_shape = input_shape
+        for layer in self.layers:
+            layer.init_weights(prev_output_shape)
+            prev_output_shape = layer.get_output_shape()
+
+        self.output_shape = prev_output_shape
+        self.output_num = np.prod(prev_output_shape)
 
     def loss(self, expected_output, prediction):
         return np.sum(np.power(expected_output - prediction, 2)) / self.output_num

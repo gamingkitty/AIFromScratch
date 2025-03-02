@@ -36,16 +36,17 @@ def main():
 
     # ai_model = model.Model.load(save_as)
     ai_model = model.Model(
-        784,
+        (28, 28),
         layers.Dense(16, activation_functions.relu, activation_functions.relu_derivative),
-        layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative),
+        layers.Dense(16, activation_functions.relu, activation_functions.relu_derivative),
+        layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative)
     )
 
     accuracy = ai_model.test(test_images, ohe_test_labels)
     print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    ai_model.fit(train_images, ohe_train_labels, 15, 0.01)
+    ai_model.fit(train_images, ohe_train_labels, 10, 0.01)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

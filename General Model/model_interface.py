@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/model_bias")
+    ai_model = model.Model.load("Models/model_test")
 
     image = np.zeros((28, 28))
 

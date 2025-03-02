@@ -9,12 +9,12 @@ class Dense:
         self.weights = np.array([])
         self.gradient = np.array([])
 
-    def init_weights(self, previous_layer_neuron_num):
-        self.weights = np.random.rand(previous_layer_neuron_num, self.neuron_num) - 0.5
+    def init_weights(self, previous_layer_output_shape):
+        self.weights = np.random.rand(np.prod(previous_layer_output_shape), self.neuron_num) - 0.5
         self.gradient = np.zeros_like(self.weights)
 
     def forward_pass(self, prev_layer_activation):
-        z_data = np.dot(prev_layer_activation, self.weights)
+        z_data = np.dot(prev_layer_activation.flatten(), self.weights)
         a_data = self.activation_function(z_data)
 
         return z_data, a_data
@@ -30,3 +30,19 @@ class Dense:
     def update_weights(self, learning_rate):
         self.weights -= learning_rate * self.gradient
         self.gradient = np.zeros_like(self.weights)
+
+    def get_output_shape(self):
+        return self.neuron_num, 1
+
+
+# class Convolution:
+#     def __init__(self, kernel_shape, activation_function, activation_function_derivative):
+#         self.input_shape = None
+#         self.kernel_shape = kernel_shape
+#         self.activation_function = activation_function
+#         self.activation_function_derivative = activation_function_derivative
+#         self.kernel = np.zeros_like(kernel_shape)
+#
+#     def init_weights(self, previous_layer_output_shape):
+#         self.kernel = np.random.rand(self.kernel_shape) - 0.5
+#         self.input_shape = previous_layer_output_shape

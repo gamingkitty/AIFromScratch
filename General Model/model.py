@@ -29,6 +29,7 @@ class Model:
         return prediction
 
     def forward_propagate(self, input_data):
+        input_data = input_data.flatten()
         z_data = []
         # Starts with input_data in it, will be 1 longer than z.
         a_data = [input_data]
@@ -66,6 +67,9 @@ class Model:
                 self.backwards_propagate(z_data, a_data, labels[j])
                 for layer in self.layers:
                     layer.update_weights(learning_rate)
+                if j % 500 == 0 and j != 0:
+                    print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
+
 
             print(f"Finished epoch {i + 1} with an average loss of {(total_loss / data_size):.6f} and {(100 * (total_correct / data_size)):.4f}% accuracy.")
         print("Finished training model.")

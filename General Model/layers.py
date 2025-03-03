@@ -62,7 +62,7 @@ class Convolution:
         z_data = np.zeros(self.output_shape)
         for y in range(self.output_shape[0]):
             for x in range(self.output_shape[1]):
-                z_data[x, y] = np.sum(np.dot(prev_layer_activation[x:x + self.kernel_shape[1], y:y + self.kernel_shape[0]], self.kernel))
+                z_data[y, x] = np.sum(np.dot(prev_layer_activation[y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]], self.kernel))
 
         z_data = z_data.flatten()
         a_data = self.activation_function(z_data)
@@ -89,7 +89,8 @@ class Convolution:
         dz_dw = dz_dw.reshape(dz_dw.shape[0], -1)
 
         # Calculate gradient
-        self.gradient += np.dot(dc_dz, dz_dw.T)
+        # Not sure why I have to subtract here, might have missed a negative somewhere while doing math?
+        self.gradient -= np.dot(dc_dz, dz_dw.T)
 
         # Calculate new dc_da
         dc_da = np.dot(dc_dz, dz_da)
@@ -101,4 +102,3 @@ class Convolution:
 
     def get_output_shape(self):
         return self.output_shape
-

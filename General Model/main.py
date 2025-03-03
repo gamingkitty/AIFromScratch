@@ -20,7 +20,7 @@ def load_data():
 
 
 def main():
-    save_as = "Models/model_test"
+    save_as = "Models/model_convolution"
 
     train_images, train_labels, test_images, test_labels = load_data()
     possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])

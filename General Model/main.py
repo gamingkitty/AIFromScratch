@@ -20,7 +20,7 @@ def load_data():
 
 
 def main():
-    save_as = "Models/model_convolution"
+    save_as = "Models/model_convolution_5"
 
     train_images, train_labels, test_images, test_labels = load_data()
     possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -34,10 +34,11 @@ def main():
     for i in range(len(ohe_test_labels)):
         ohe_test_labels[i][test_labels[i]] = 1
 
-    # ai_model = model.Model.load(save_as)
+    ai_model = model.Model.load(save_as)
     ai_model = model.Model(
         (28, 28),
-        layers.Convolution((3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution((5, 5), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Dense(32, activation_functions.relu, activation_functions.relu_derivative),
         layers.Dense(16, activation_functions.relu, activation_functions.relu_derivative),
         layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative)
     )
@@ -46,7 +47,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     print()
 
-    ai_model.fit(train_images, ohe_train_labels, 10, 0.01)
+    ai_model.fit(train_images, ohe_train_labels, 2, 0.005)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

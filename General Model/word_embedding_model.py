@@ -87,24 +87,24 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/embedding_model_cat_2")
+    embedding_model = model.Model.load("Models/embedding_model_cat_3")
     # embedding_model = model.Model(
     #     (context_window - 1, vocab_size),
     #     layers.Embedding(embedding_dimension, activation_functions.relu, activation_functions.relu_derivative),
     #     layers.Dense(vocab_size, activation_functions.softmax, activation_functions.softmax_derivative)
     # )
 
-    embedding_weights = embedding_model.layers[0].weights
-
-    word_to_index = {word: i for i, word in enumerate(vocab)}
-
-    word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
-
-    print(most_similar("pets", word_vectors, 10))
-
-    # embedding_model.fit(word_data, labels, 50, vocab_size * 0.11)
+    # embedding_weights = embedding_model.layers[0].weights
     #
-    # embedding_model.save("Models/embedding_model_cat_2")
+    # word_to_index = {word: i for i, word in enumerate(vocab)}
+    #
+    # word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
+    #
+    # print(most_similar("pets", word_vectors, 10))
+
+    embedding_model.fit(word_data, labels, 50, vocab_size * 0.05)
+
+    embedding_model.save("Models/embedding_model_cat_3")
 
 
 if __name__ == "__main__":

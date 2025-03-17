@@ -9,6 +9,7 @@ import re
 def cosine_similarity(vec1, vec2):
     return np.dot(vec1, vec2) / (norm(vec1) * norm(vec2))
 
+
 def most_similar(word, word_vectors, top_n=5):
     if word not in word_vectors:
         return f"Word '{word}' not in vocabulary."
@@ -21,6 +22,7 @@ def most_similar(word, word_vectors, top_n=5):
 
     sorted_similarities = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
     return sorted_similarities[:top_n]
+
 
 def analogy(word1, word2, word3, word_vectors, top_n=5):
     # Solves word analogy: word1 is to word2 as word3 is to ???
@@ -75,9 +77,9 @@ def load_data(filename, context_window):
 
 def main():
     context_window = 5
-    embedding_dimension = 32
+    embedding_dimension = 64
 
-    word_data, labels, vocab = load_data("embedding_data.txt", 5)
+    word_data, labels, vocab = load_data("embedding_data_test.txt", 5)
     vocab_size = len(vocab)
 
     print(f"Amount of data: {len(labels)}")
@@ -85,24 +87,25 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/embedding_model_king")
+    embedding_model = model.Model.load("Models/embedding_model_cat_2")
     # embedding_model = model.Model(
     #     (context_window - 1, vocab_size),
     #     layers.Embedding(embedding_dimension, activation_functions.relu, activation_functions.relu_derivative),
     #     layers.Dense(vocab_size, activation_functions.softmax, activation_functions.softmax_derivative)
     # )
 
-    # embedding_weights = embedding_model.layers[0].weights
-    #
-    # word_to_index = {word: i for i, word in enumerate(vocab)}
-    #
-    # word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
-    #
-    # print(analogy("male", "female", "king", word_vectors, 10))
+    embedding_weights = embedding_model.layers[0].weights
 
-    embedding_model.fit(word_data, labels, 50, vocab_size * 0.15)
+    word_to_index = {word: i for i, word in enumerate(vocab)}
 
-    embedding_model.save("Models/embedding_model_king")
+    word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
+
+    print(most_similar("pets", word_vectors, 10))
+
+    # embedding_model.fit(word_data, labels, 50, vocab_size * 0.11)
+    #
+    # embedding_model.save("Models/embedding_model_cat_2")
+
 
 if __name__ == "__main__":
     main()

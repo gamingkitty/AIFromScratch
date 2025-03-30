@@ -14,6 +14,9 @@ class Dense:
         self.weights = np.random.rand(np.prod(previous_layer_output_shape), self.neuron_num) - 0.5
         self.gradient = np.zeros_like(self.weights)
 
+    def predict(self, prev_layer_activation):
+        return self.activation_function(np.dot(prev_layer_activation.flatten(), self.weights))
+
     def forward_pass(self, prev_layer_activation):
         z_data = np.dot(prev_layer_activation.flatten(), self.weights)
         a_data = self.activation_function(z_data)
@@ -56,6 +59,10 @@ class Convolution:
         self.input_num = np.prod(self.input_shape)
         self.output_shape = ((self.input_shape[0] - self.kernel_shape[0]) + 1, (self.input_shape[1] - self.kernel_shape[1]) + 1)
         self.output_num = np.prod(self.output_shape)
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
 
     def forward_pass(self, prev_layer_activation):
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
@@ -103,36 +110,57 @@ class Convolution:
     def get_output_shape(self):
         return self.output_shape
 
-# class MaxPooling:
-#     def __init__(self, kernel_shape, stride, input_shape=None):
-#         self.kernel_shape = kernel_shape
-#         self.stride = stride
-#         self.input_shape = input_shape
-#         self.output_shape = None
-#         self.output_num = None
-#
-#     def init_weights(self, previous_layer_output_shape):
-#         if self.input_shape is None:
-#             self.input_shape = previous_layer_output_shape
-#         self.output_shape = (math.ceil(self.input_shape[0] / self.stride), math.ceil(self.input_shape[1] / self.stride))
-#         self.output_num = np.prod(self.output_shape)
-#
-#     def forward_pass(self, prev_layer_activation):
-#         a_data = np.zeros(self.output_shape)
-#         for y in range(self.output_shape[0]):
-#             for x in range(self.output_shape[1]):
-#                 a_data[y, x] = np.max(prev_layer_activation[y * self.stride:max(y * self.stride + self.kernel_shape[0], prev_layer_activation.shape[0]), x * self.stride:max(x * self.stride + self.kernel_shape[1], prev_layer_activation.shape[1])])
-#
-#         return a_data, a_data
-#
-#     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-#         dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1]))
-#         for y in range(self.output_shape[0]):
-#             for x in range(self.output_shape[1]):
-#                 y = y * self.stride
-#                 x = x * self.stride
-#                 dz_da[y * self.output_shape[1] + x, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernel
-#         dz_da = dz_da.reshape(dz_da.shape[0], -1)
+
+class MaxPooling:
+    def __init__(self, kernel_shape, stride, input_shape=None):
+        self.kernel_shape = kernel_shape
+        self.stride = stride
+        self.input_shape = input_shape
+        self.output_shape = None
+        self.output_num = None
+
+    def init_weights(self, previous_layer_output_shape):
+        if self.input_shape is None:
+            self.input_shape = previous_layer_output_shape
+        self.output_shape = (math.ceil(self.input_shape[0] / self.stride), math.ceil(self.input_shape[1] / self.stride))
+        self.output_num = np.prod(self.output_shape)
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
+
+        a_data = np.zeros(self.output_shape)
+        for y in range(self.output_shape[0]):
+            for x in range(self.output_shape[1]):
+                stride_y = y * self.stride
+                stride_x = x * self.stride
+                a_data[y, x] = np.max(prev_layer_activation[stride_y:min(stride_y + self.kernel_shape[0], prev_layer_activation.shape[0]), stride_x:min(stride_x + self.kernel_shape[1], prev_layer_activation.shape[1])])
+
+        return a_data, a_data
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        prev_layer_a = prev_layer_a.reshape(self.input_shape)
+
+        new_dc_da = np.zeros(self.input_shape)
+        dc_da = dc_da.reshape(self.output_shape)
+        for y in range(self.output_shape[0]):
+            for x in range(self.output_shape[1]):
+                stride_y = y * self.stride
+                stride_x = x * self.stride
+                window = prev_layer_a[stride_y:min(stride_y + self.kernel_shape[0], prev_layer_a.shape[0]), stride_x:min(stride_x + self.kernel_shape[1], prev_layer_a.shape[1])]
+                max_index = np.unravel_index(np.argmax(window), window.shape)
+                new_dc_da[stride_y + max_index[0], stride_x + max_index[1]] += dc_da[y, x]
+
+        return new_dc_da.flatten()
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
 
 
 class Embedding:
@@ -149,6 +177,10 @@ class Embedding:
             self.input_shape = previous_layer_output_shape
         self.weights = np.random.rand(self.input_shape[1], self.neuron_num) - 0.5
         self.gradient = np.zeros_like(self.weights)
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
 
     def forward_pass(self, prev_layer_activation):
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
@@ -172,3 +204,32 @@ class Embedding:
     def get_output_shape(self):
         return self.neuron_num, 1
 
+
+class Dropout:
+    def __init__(self, dropout_percent):
+        self.dropout_percent = dropout_percent
+        self.input_shape = None
+        self.input_num = None
+        self.dz_da = None
+
+    def init_weights(self, previous_layer_output_shape):
+        self.input_shape = previous_layer_output_shape
+        self.input_num = np.prod(self.input_shape)
+
+    def predict(self, prev_layer_activation):
+        return prev_layer_activation
+
+    def forward_pass(self, prev_layer_activation):
+        mask = np.random.rand(*prev_layer_activation.shape) > self.dropout_percent
+        self.dz_da = mask.astype(float)
+        a_data = prev_layer_activation * self.dz_da
+        return a_data, a_data
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return dc_da * self.dz_da.flatten()
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.input_shape

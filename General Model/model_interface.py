@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/model_convolution_5")
+    ai_model = model.Model.load("Models/model_convolution_pooling")
 
     image = np.zeros((28, 28))
 

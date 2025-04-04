@@ -20,7 +20,7 @@ def load_data():
 
 
 def main():
-    save_as = "Models/model_convolution_pooling_dropout"
+    save_as = "Models/model_convolution_multiple_kernels"
 
     train_images, train_labels, test_images, test_labels = load_data()
     possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -34,21 +34,31 @@ def main():
     for i in range(len(ohe_test_labels)):
         ohe_test_labels[i][test_labels[i]] = 1
 
-    ai_model = model.Model.load(save_as)
+    # ai_model = model.Model.load(save_as)
     # ai_model = model.Model(
-    #     (28, 28),
-    #     layers.Convolution((5, 5), activation_functions.relu, activation_functions.relu_derivative),
-    #     layers.MaxPooling((2, 2), 2),
-    #     layers.Dropout(0.25),
-    #     layers.Convolution((3, 3), activation_functions.relu, activation_functions.relu_derivative),
-    #     layers.Dense(128, activation_functions.relu, activation_functions.relu_derivative),
+    #     (1, 28, 28),
+    #     layers.Convolution(2, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
     #     layers.Dense(64, activation_functions.relu, activation_functions.relu_derivative),
+    #     layers.Dense(32, activation_functions.relu, activation_functions.relu_derivative),
     #     layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative)
     # )
+    ai_model = model.Model(
+        (1, 28, 28),
+        layers.Convolution(4, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.MaxPooling((2, 2), 2),
+
+        layers.Convolution(4, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.MaxPooling((2, 2), 2),
+
+        layers.Dense(64, activation_functions.relu, activation_functions.relu_derivative),
+        layers.Dropout(0.5),
+
+        layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative)
+    )
 
     # accuracy = ai_model.test(test_images, ohe_test_labels)
     # print(f"Initial model accuracy is {accuracy * 100}%")
-    print()
+    # print()
 
     ai_model.fit(train_images, ohe_train_labels, 1, 0.02)
 

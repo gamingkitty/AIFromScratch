@@ -44,42 +44,44 @@ def load_data(filename, context_window):
     with open(filename, 'r', encoding='utf-8') as file:
         text = file.read()
 
-    sentences = re.split(r'[.!?]\s+', text.strip())
+    # Tokenize while keeping punctuation as separate tokens
+    tokens = re.findall(r'\b\w+\b|[^\w\s]', text)
 
-    word_list = [[re.sub(r'[^a-zA-Z0-9]', '', word).lower() for word in sentence.split()] for sentence in sentences]
+    tokens = [token.lower() for token in tokens]
 
-    all_words = set(word for sentence in word_list for word in sentence if word)
+    # Get unique vocabulary
+    all_words = set(tokens)
     vocab = sorted(all_words)
     vocab_size = len(vocab)
 
+    # Mapping words to indices
     word_to_index = {word: i for i, word in enumerate(vocab)}
 
-    one_hot_encoded = [
-        [np.eye(vocab_size)[word_to_index[word]] for word in sentence if word]
-        for sentence in word_list
-    ]
+    # Convert tokens to one-hot encoded representation
+    one_hot_encoded = [np.eye(vocab_size)[word_to_index[word]] for word in tokens]
 
     data = []
     labels = []
 
-    middle_word_index = context_window // 2
+    # middle_word_index = context_window // 2
+    middle_word_index = context_window - 1
 
-    for sentence in one_hot_encoded:
-        sentence_len = len(sentence)
-        index = 0
-        while sentence_len - index >= context_window:
-            data.append(sentence[index:index + middle_word_index] + sentence[index + middle_word_index + 1: index + 2 * middle_word_index + 1])
-            labels.append(sentence[index + middle_word_index])
-            index += 1
+    word_len = len(one_hot_encoded)
+    index = 0
+    while word_len - index >= context_window:
+        # data.append(sentence[index:index + middle_word_index] + sentence[index + middle_word_index + 1: index + 2 * middle_word_index + 1])
+        data.append(one_hot_encoded[index:index + middle_word_index])
+        labels.append(one_hot_encoded[index + middle_word_index])
+        index += 1
 
     return np.array(data), np.array(labels), vocab
 
 
 def main():
-    context_window = 5
+    context_window = 11
     embedding_dimension = 64
 
-    word_data, labels, vocab = load_data("embedding_data_test.txt", 5)
+    word_data, labels, vocab = load_data("embedding_data_test.txt", context_window)
     vocab_size = len(vocab)
 
     print(f"Amount of data: {len(labels)}")
@@ -87,7 +89,7 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/embedding_model_cat_3")
+    embedding_model = model.Model.load("Models/prediction_model_3")
     # embedding_model = model.Model(
     #     (context_window - 1, vocab_size),
     #     layers.Embedding(embedding_dimension, activation_functions.relu, activation_functions.relu_derivative),
@@ -102,9 +104,9 @@ def main():
     #
     # print(most_similar("pets", word_vectors, 10))
 
-    embedding_model.fit(word_data, labels, 50, vocab_size * 0.05)
+    embedding_model.fit(word_data, labels, 50, vocab_size * 0.12)
 
-    embedding_model.save("Models/embedding_model_cat_3")
+    embedding_model.save("Models/prediction_model_3")
 
 
 if __name__ == "__main__":

@@ -44,10 +44,10 @@ def main():
     # )
     ai_model = model.Model(
         (1, 28, 28),
-        layers.Convolution(4, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(16, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
         layers.MaxPooling((2, 2), 2),
 
-        layers.Convolution(4, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(32, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
         layers.MaxPooling((2, 2), 2),
 
         layers.Dense(64, activation_functions.relu, activation_functions.relu_derivative),
@@ -60,7 +60,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 1, 0.02)
+    ai_model.fit(train_images, ohe_train_labels, 1, 0.02, 32)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

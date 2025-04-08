@@ -56,6 +56,7 @@ class Convolution:
         self.gradient = None
         self.gradient_size = None
         self.true_output_shape = None
+        self.dz_da = None
 
     def init_weights(self, previous_layer_output_shape):
         self.channel_kernel_shape = (previous_layer_output_shape[0], *self.kernel_shape)
@@ -71,6 +72,15 @@ class Convolution:
         self.output_shape = ((self.input_shape[1] - self.kernel_shape[0]) + 1, (self.input_shape[2] - self.kernel_shape[1]) + 1)
         self.true_output_shape = (self.kernel_num, *self.output_shape)
         self.output_num = np.prod(self.output_shape)
+
+        # Calculate initial dz_da
+        self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_num))
+        for k in range(self.kernel_num):
+            dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
+            for y in range(self.output_shape[0]):
+                for x in range(self.output_shape[1]):
+                    dz_da[y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
+            self.dz_da[k] = dz_da.reshape(dz_da.shape[0], -1)
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -102,12 +112,7 @@ class Convolution:
             # Calculate dc_dz
             dc_dz = np.dot(dc_da[k], self.activation_function_derivative(this_layer_z[k]))
 
-            # Calculate dz_da
-            dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
-            for y in range(self.output_shape[0]):
-                for x in range(self.output_shape[1]):
-                    dz_da[y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
-            dz_da = dz_da.reshape(dz_da.shape[0], -1)
+            # dz_da calculation is done in weight updates as it only depends on the kernels, so will only change when the kernel changes.
 
             # Calculate dz_dw
             dz_dw = np.zeros((self.kernel_size, self.output_num))
@@ -124,7 +129,7 @@ class Convolution:
             gradient[k] = np.dot(dc_dz, dz_dw.T)
 
             # Calculate new dc_da
-            new_dc_da += np.dot(dc_dz, dz_da)
+            new_dc_da += np.dot(dc_dz, self.dz_da[k])
 
         self.gradient += gradient.flatten()
 
@@ -133,6 +138,15 @@ class Convolution:
     def update_weights(self, learning_rate):
         self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape))
         self.gradient = np.zeros(self.gradient_size)
+
+        # Calculate dz_da
+        self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_num))
+        for k in range(self.kernel_num):
+            dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
+            for y in range(self.output_shape[0]):
+                for x in range(self.output_shape[1]):
+                    dz_da[y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
+            self.dz_da[k] = dz_da.reshape(dz_da.shape[0], -1)
 
     def get_output_shape(self):
         return self.true_output_shape

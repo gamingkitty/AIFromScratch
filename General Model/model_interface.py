@@ -31,19 +31,32 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/large_basic_model")
+    ai_model = model.Model.load("Models/convolution_test")
+    ai_model.layers = (*ai_model.layers[:-2], ai_model.layers[-1])
 
     image = np.zeros((28, 28))
 
     train_images, train_labels, test_images, test_labels = load_data()
     current_image = 0
 
+    data = np.load('Own Number Dataset/number_data_test.npz', allow_pickle=True)
+
+    own_images = data['images']
+    own_labels = data['labels']
+
+    test_images = own_images
+    test_labels = own_labels
+
+    # accuracy = ai_model.test(own_images, own_labels)
+
+    # print(f"Accuracy on own numbers: {accuracy * 100}%")
+
     pygame.init()
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
 
     scale = 20
 
-    screen = pygame.display.set_mode((28 * scale + 300, 28 * scale))
+    screen = pygame.display.set_mode((56 * scale + 300, 28 * scale))
     draw_rect = pygame.Rect((0, 0), (scale * 28, scale * 28))
     pygame.display.set_caption('Model Interface')
 
@@ -59,12 +72,16 @@ def main():
     own_data = []
     own_labels = []
 
+    image_2 = np.zeros((28, 28))
+
     clock = pygame.time.Clock()
     fps = 60
 
     mouse_held = False
 
     last_position = None
+
+    create_num = None
 
     # Main Game Loop
     while True:
@@ -82,6 +99,9 @@ def main():
             text = str(sorted_indices[i]) + f", {predictions[i] * 100:0.2f}%"
             rendered_text = font.render(text, True, white)
             screen.blit(rendered_text, (scale * 28 + (info_rect.width - rendered_text.get_width()) / 2, 70 + i * 40))
+
+        if mouse_pos[0] > 28 * scale + 300:
+            mouse_pos = (mouse_pos[0] - (28 * scale + 300), mouse_pos[1])
 
         if mouse_held and draw_rect.collidepoint(mouse_pos):
             place_position = (mouse_pos[0] // scale, mouse_pos[1] // scale)
@@ -101,7 +121,7 @@ def main():
 
                         for nx, ny in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]:
                             if 0 <= nx < image.shape[0] and 0 <= ny < image.shape[1]:
-                                image[nx, ny] += 0.2
+                                image[nx, ny] += 0.0
                                 image[nx, ny] = min(1, image[nx, ny])
 
             last_position = place_position
@@ -110,11 +130,16 @@ def main():
 
         for y in range(len(image)):
             for x in range(len(image[y])):
-                pygame.draw.rect(screen, (int(255 * image[x, y]), int(255 * image[x, y]), int(255 * image[x, y])), (x * scale, y * scale, scale, scale))
+                brightness = image[x, y] ** (1 / 2.2)
+                pygame.draw.rect(screen, (int(255 * brightness), int(255 * brightness), int(255 * brightness)), (x * scale, y * scale, scale, scale))
+
+        for y in range(len(image_2)):
+            for x in range(len(image_2[y])):
+                pygame.draw.rect(screen, (int(255 * image_2[x, y]), int(255 * image_2[x, y]), int(255 * image_2[x, y])), ((x + 28) * scale + 300, y * scale, scale, scale))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                # np.savez("Own Number Dataset/number_data_test.npz", images=own_data, labels=own_labels)
+                # np.savez("Own Number Dataset/number_data.npz", images=own_data, labels=own_labels)
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_held = True
@@ -130,13 +155,50 @@ def main():
                     current_image -= 1
                     current_image = max(current_image, 0)
                     image = test_images[current_image].reshape((28, 28)).T
+                # elif pygame.K_0 <= event.key <= pygame.K_9:
+                #     number_pressed = event.key - pygame.K_0
+                #     ohe_number = np.zeros(10)
+                #     ohe_number[number_pressed] = 1
+                #     own_data.append(image.T.flatten())
+                #     own_labels.append(ohe_number)
+                #     image = np.zeros((28, 28))
                 elif pygame.K_0 <= event.key <= pygame.K_9:
                     number_pressed = event.key - pygame.K_0
-                    ohe_number = np.zeros(10)
-                    ohe_number[number_pressed] = 1
-                    own_data.append(image.T.flatten())
-                    own_labels.append(ohe_number)
-                    image = np.zeros((28, 28))
+                    create_num = number_pressed
+                    label = np.zeros(10)
+                    label[number_pressed] = 1
+                    z_data, a_data = ai_model.forward_propagate(image.T)
+                    ai_model.backwards_propagate(z_data, a_data, label)
+                    image_2 = ai_model.final_dc_da
+                    image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
+                    image_2 = image_2.reshape((28, 28)).T
+                elif event.key == pygame.K_n:
+                    noise = np.random.rand(784) - 0.5
+                    noise *= 0.2
+                    image += noise.reshape((28, 28))
+                    image = (image - image.min()) / (image.max() - image.min())
+                elif event.key == pygame.K_y:
+                    add = 0.2 - image_2
+                    add = np.maximum(add, 0)
+                    image += add * 0.1
+
+                    image = (image - image.min()) / (image.max() - image.min())
+
+        if create_num is not None:
+            number_pressed = create_num
+            label = np.zeros(10)
+            label[number_pressed] = 1
+            z_data, a_data = ai_model.forward_propagate(image.T)
+            ai_model.backwards_propagate(z_data, a_data, label)
+            image_2 = ai_model.final_dc_da
+            image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
+            image_2 = image_2.reshape((28, 28)).T
+
+            image_2 = 0.3 - image_2
+            image_2 = np.maximum(image_2, 0)
+            image += image_2 * 0.5
+
+            image = (image - image.min()) / (image.max() - image.min())
 
         # Update the screen
         pygame.display.flip()

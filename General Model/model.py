@@ -66,7 +66,7 @@ class Model:
                 total_correct += np.argmax(a_data[-1]) == np.argmax(labels[j])
                 self.backwards_propagate(z_data, a_data, labels[j])
 
-                if j % batch_size == 0:
+                if j % batch_size == 0 and j != 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate)
                 if j % 500 == 0 and j != 0:
@@ -74,7 +74,6 @@ class Model:
 
             for layer in self.layers:
                 layer.update_weights(learning_rate)
-
 
             print(f"Finished epoch {i + 1} with an average loss of {(total_loss / data_size):.6f} and {(100 * (total_correct / data_size)):.4f}% accuracy.")
         print("Finished training model.")

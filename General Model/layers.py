@@ -20,24 +20,6 @@ def get_windows(window_shape, matrix):
     return windows
 
 
-def get_windows_stride(window_shape, matrix, stride):
-    win_h, win_w = window_shape
-    mat_h, mat_w = matrix.shape
-
-    out_h = mat_h - win_h + 1
-    out_w = mat_w - win_w + 1
-
-    windows = np.empty((out_h * out_w, win_h, win_w), dtype=matrix.dtype)
-
-    idx = 0
-    for i in range(out_h):
-        for j in range(out_w):
-            windows[idx] = matrix[i:i + win_h, j:j + win_w]
-            idx += 1
-
-    return windows
-
-
 class Dense:
     def __init__(self, neuron_num, activation_function, activation_function_derivative):
         self.neuron_num = neuron_num
@@ -123,6 +105,7 @@ class Convolution:
     def forward_pass(self, prev_layer_activation):
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
 
+        # Transpose so that its (window_num, channel_num, k_h, k_w) this way it matches the kernels and math can be done on it easily.
         windows = np.transpose(np.array([get_windows(self.kernel_shape, channel) for channel in prev_layer_activation]), (1, 0, 2, 3))
 
         z_data = np.tensordot(windows, self.kernels, axes=([1, 2, 3], [1, 2, 3])).T.flatten()
@@ -141,8 +124,9 @@ class Convolution:
         # We don't need to calculate this in the loop because all kernels are the same size and have the same derivative wrt z.
         dz_dw = np.array([get_windows(self.output_shape, channel) for channel in prev_layer_a]).reshape(-1, self.output_num)
 
+        # Should figure out how to remove this for loop in the future. Probably can.
         for k in range(self.kernel_num):
-            # Calculate dc_dz
+            # Calculate dc_dz by dotting jacobian matrix derivative of the activation function and dc_da
             dc_dz = np.dot(dc_da[k], self.activation_function_derivative(this_layer_z[k]))
 
             # Calculate gradient
@@ -181,7 +165,8 @@ class MaxPooling:
     def init_weights(self, previous_layer_output_shape):
         if self.input_shape is None:
             self.input_shape = previous_layer_output_shape
-        self.output_shape = (self.input_shape[0], math.ceil(self.input_shape[1] / self.stride), math.ceil(self.input_shape[2] / self.stride))
+        self.output_shape = (self.input_shape[0], math.ceil(self.input_shape[1] / self.stride) - math.ceil(self.kernel_shape[0] / self.stride) + 1,
+                                                  math.ceil(self.input_shape[2] / self.stride) - math.ceil(self.kernel_shape[1] / self.stride) + 1)
         self.output_num = np.prod(self.output_shape)
 
     def predict(self, prev_layer_activation):

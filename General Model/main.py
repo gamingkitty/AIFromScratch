@@ -44,10 +44,10 @@ def main():
     # )
     ai_model = model.Model(
         (1, 28, 28),
-        layers.Convolution(16, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(32, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
         layers.MaxPooling((2, 2), 2),
 
-        layers.Convolution(32, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(64, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
         layers.MaxPooling((2, 2), 2),
 
         layers.Dense(64, activation_functions.relu, activation_functions.relu_derivative),

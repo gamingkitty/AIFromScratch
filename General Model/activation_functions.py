@@ -36,4 +36,3 @@ def softmax_derivative(x):
     jacobian = diagonal_softmax - softmax_outer
 
     return jacobian
-

@@ -1,13 +1,14 @@
 import numpy as np
+import layers
 import pickle
 
 
 class Model:
-    def __init__(self, input_shape, *layers):
+    def __init__(self, input_shape, *layerss):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
-        self.layers = layers
+        self.layers = layerss
 
         prev_output_shape = input_shape
         for layer in self.layers:

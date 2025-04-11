@@ -44,16 +44,16 @@ def main():
     # )
     ai_model = model.Model(
         (1, 28, 28),
-        layers.Convolution(32, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(32, (3, 3), activation_functions.relu),
         layers.MaxPooling((2, 2), 2),
 
-        layers.Convolution(64, (3, 3), activation_functions.relu, activation_functions.relu_derivative),
+        layers.Convolution(64, (3, 3), activation_functions.relu),
         layers.MaxPooling((2, 2), 2),
 
-        layers.Dense(64, activation_functions.relu, activation_functions.relu_derivative),
+        layers.Dense(64, activation_functions.relu),
         layers.Dropout(0.5),
 
-        layers.Dense(10, activation_functions.softmax, activation_functions.softmax_derivative)
+        layers.Dense(10, activation_functions.softmax)
     )
 
     # accuracy = ai_model.test(test_images, ohe_test_labels)

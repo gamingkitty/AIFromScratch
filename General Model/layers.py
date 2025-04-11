@@ -1,30 +1,51 @@
 import math
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
+import time
 
 
 def get_windows(window_shape, matrix):
     win_h, win_w = window_shape
-    mat_h, mat_w = matrix.shape
-
+    out_c, mat_h, mat_w = matrix.shape
     out_h = mat_h - win_h + 1
     out_w = mat_w - win_w + 1
 
-    windows = np.empty((out_h * out_w, win_h, win_w), dtype=matrix.dtype)
+    # Strides for moving through matrix
+    stride_c, stride_h, stride_w = matrix.strides
 
-    idx = 0
-    for i in range(out_h):
-        for j in range(out_w):
-            windows[idx] = matrix[i:i + win_h, j:j + win_w]
-            idx += 1
+    # Shape of output: (channels, out_h, out_w, win_h, win_w)
+    shape = (out_c, out_h, out_w, win_h, win_w)
+    strides = (stride_c, stride_h, stride_w, stride_h, stride_w)
 
+    windows = as_strided(matrix, shape=shape, strides=strides).reshape(out_c, out_h * out_h, win_h, win_w)
     return windows
 
 
+# def get_windows(window_shape, matrix):
+#     global total_window_time
+#     start = time.perf_counter()
+#     win_h, win_w = window_shape
+#     mat_h, mat_w = matrix.shape[1], matrix.shape[2]
+#
+#     out_c = matrix.shape[0]
+#     out_h = mat_h - win_h + 1
+#     out_w = mat_w - win_w + 1
+#     windows = np.empty((out_c, out_h * out_w, win_h, win_w), dtype=matrix.dtype)
+#     for c in range(out_c):
+#         idx = 0
+#         for i in range(out_h):
+#             for j in range(out_w):
+#                 windows[c, idx] = matrix[c, i:i + win_h, j:j + win_w]
+#                 idx += 1
+#     dt = time.perf_counter() - start
+#     total_window_time += dt
+#     return windows
+
+
 class Dense:
-    def __init__(self, neuron_num, activation_function, activation_function_derivative):
+    def __init__(self, neuron_num, activation_function):
         self.neuron_num = neuron_num
         self.activation_function = activation_function
-        self.activation_function_derivative = activation_function_derivative
         self.weights = np.array([])
         self.gradient = np.array([])
 
@@ -45,7 +66,10 @@ class Dense:
         prev_layer_a = prev_layer_a.flatten()
         # Need to return dc_da (error signal)
         # Can store gradient in the class
-        dc_dz = np.dot(dc_da, self.activation_function_derivative(this_layer_z))
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+        else:
+            dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
         self.gradient += dc_dz * prev_layer_a[:, np.newaxis]
         dc_da = np.dot(dc_dz, self.weights.T)
         return dc_da
@@ -59,14 +83,13 @@ class Dense:
 
 
 class Convolution:
-    def __init__(self, kernel_num, kernel_shape, activation_function, activation_function_derivative, input_shape=None):
+    def __init__(self, kernel_num, kernel_shape, activation_function, input_shape=None):
         self.input_shape = input_shape
         self.input_num = 0
         self.kernel_shape = kernel_shape
         self.channel_kernel_shape = None
         self.kernel_size = None
         self.activation_function = activation_function
-        self.activation_function_derivative = activation_function_derivative
         self.kernels = None
         self.kernel_num = kernel_num
         self.output_shape = ()
@@ -91,12 +114,12 @@ class Convolution:
         self.true_output_shape = (self.kernel_num, *self.output_shape)
         self.output_num = np.prod(self.output_shape)
 
+        self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
         for k in range(self.kernel_num):
-            self.dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
             for y in range(self.output_shape[0]):
                 for x in range(self.output_shape[1]):
-                    self.dz_da[y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
-            self.dz_da = self.dz_da.reshape(self.dz_da.shape[0], -1)
+                    self.dz_da[k, y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
+        self.dz_da = self.dz_da.reshape(self.kernel_num, self.output_num, -1)
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -106,7 +129,7 @@ class Convolution:
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
 
         # Transpose so that its (window_num, channel_num, k_h, k_w) this way it matches the kernels and math can be done on it easily.
-        windows = np.transpose(np.array([get_windows(self.kernel_shape, channel) for channel in prev_layer_activation]), (1, 0, 2, 3))
+        windows = np.transpose(get_windows(self.kernel_shape, prev_layer_activation), (1, 0, 2, 3))
 
         z_data = np.tensordot(windows, self.kernels, axes=([1, 2, 3], [1, 2, 3])).T.flatten()
 
@@ -114,41 +137,44 @@ class Convolution:
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        gradient = np.zeros((self.kernel_num, self.kernel_size))
-
         dc_da = dc_da.reshape((self.kernel_num, self.output_num))
         this_layer_z = this_layer_z.reshape((self.kernel_num, self.output_num))
-        new_dc_da = np.zeros(self.input_num)
         prev_layer_a = prev_layer_a.reshape(self.input_shape)
 
-        # We don't need to calculate this in the loop because all kernels are the same size and have the same derivative wrt z.
-        dz_dw = np.array([get_windows(self.output_shape, channel) for channel in prev_layer_a]).reshape(-1, self.output_num)
+        dz_dw = get_windows(self.kernel_shape, prev_layer_a).reshape(-1, self.output_num)
 
-        # Should figure out how to remove this for loop in the future. Probably can.
-        for k in range(self.kernel_num):
-            # Calculate dc_dz by dotting jacobian matrix derivative of the activation function and dc_da
-            dc_dz = np.dot(dc_da[k], self.activation_function_derivative(this_layer_z[k]))
+        activation_derivative = self.activation_function.derivative(this_layer_z)
 
-            # Calculate gradient
-            gradient[k] = np.dot(dc_dz, dz_dw.T)
+        # dc_da is (kernel_num, output_num)
+        # activation_derivative is (kernel_num, output_num, output_num) or (kernel_num, output_num)
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_da * activation_derivative
+        else:
+            dc_dz = np.einsum('ko,koo->ko', dc_da, activation_derivative)
 
-            # Calculate new dc_da
-            new_dc_da += np.dot(dc_dz, self.dz_da)
+        # dz_dw is (kernel_size, output_num)
+        # dc_dz is (kernel_num, output_num)
+        # output is kernel_num, kernel_size
+        self.gradient += np.tensordot(dc_dz, dz_dw, axes=([1], [1])).flatten()
 
-        self.gradient += gradient.flatten()
+        # Calculate new dc_da
+        # dc_dz is (kernel_num, output_num)
+        # dz_da is (kernel_num, output_num, input_num)
+        # Currently the slowest operation because the matrices are so big.
+        dc_da = np.einsum('ko,koi->i', dc_dz, self.dz_da)
 
-        return new_dc_da
+        return dc_da.flatten()
 
     def update_weights(self, learning_rate):
         self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape))
         self.gradient = np.zeros(self.gradient_size)
 
+        self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
         for k in range(self.kernel_num):
-            self.dz_da = np.zeros((self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
             for y in range(self.output_shape[0]):
                 for x in range(self.output_shape[1]):
-                    self.dz_da[y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
-            self.dz_da = self.dz_da.reshape(self.dz_da.shape[0], -1)
+                    self.dz_da[k, y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
+        self.dz_da = self.dz_da.reshape(self.kernel_num, self.output_num, -1)
 
     def get_output_shape(self):
         return self.true_output_shape
@@ -215,11 +241,10 @@ class MaxPooling:
 
 
 class Embedding:
-    def __init__(self, embedding_dimension, activation_function, activation_function_derivative, input_shape=None):
+    def __init__(self, embedding_dimension, activation_function, input_shape=None):
         self.neuron_num = embedding_dimension
         self.input_shape = input_shape
         self.activation_function = activation_function
-        self.activation_function_derivative = activation_function_derivative
         self.weights = np.array([])
         self.gradient = np.array([])
 
@@ -243,7 +268,11 @@ class Embedding:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         # Need to return dc_da (error signal)
         # Can store gradient in the class
-        dc_dz = np.dot(dc_da, self.activation_function_derivative(this_layer_z))
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+        else:
+            dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
+
         self.gradient += dc_dz * np.sum(prev_layer_a.reshape(self.input_shape), axis=0)[:, np.newaxis]
         dc_da = np.dot(dc_dz, self.weights.T)
         return dc_da

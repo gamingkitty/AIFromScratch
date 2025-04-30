@@ -31,21 +31,18 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/convolution_test")
-    ai_model.layers = (*ai_model.layers[:-2], ai_model.layers[-1])
+    ai_model = model.Model.load("Models/cross_entropy_test")
 
     image = np.zeros((28, 28))
 
     train_images, train_labels, test_images, test_labels = load_data()
     current_image = 0
 
-    data = np.load('Own Number Dataset/number_data_test.npz', allow_pickle=True)
+    own_images = np.array([])
+    own_labels = np.array([])
 
-    own_images = data['images']
-    own_labels = data['labels']
-
-    test_images = own_images
-    test_labels = own_labels
+    # test_images = own_images
+    # test_labels = own_labels
 
     # accuracy = ai_model.test(own_images, own_labels)
 
@@ -121,7 +118,7 @@ def main():
 
                         for nx, ny in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]:
                             if 0 <= nx < image.shape[0] and 0 <= ny < image.shape[1]:
-                                image[nx, ny] += 0.0
+                                image[nx, ny] += 0.2
                                 image[nx, ny] = min(1, image[nx, ny])
 
             last_position = place_position

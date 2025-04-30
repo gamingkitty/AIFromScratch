@@ -4,42 +4,43 @@ from numpy.lib.stride_tricks import as_strided
 import time
 
 
-def get_windows(window_shape, matrix):
-    win_h, win_w = window_shape
-    out_c, mat_h, mat_w = matrix.shape
-    out_h = mat_h - win_h + 1
-    out_w = mat_w - win_w + 1
-
-    # Strides for moving through matrix
-    stride_c, stride_h, stride_w = matrix.strides
-
-    # Shape of output: (channels, out_h, out_w, win_h, win_w)
-    shape = (out_c, out_h, out_w, win_h, win_w)
-    strides = (stride_c, stride_h, stride_w, stride_h, stride_w)
-
-    windows = as_strided(matrix, shape=shape, strides=strides).reshape(out_c, out_h * out_h, win_h, win_w)
-    return windows
+total_convolution_time = 0
+total_pooling_time = 0
+dc_da_time = 0
 
 
 # def get_windows(window_shape, matrix):
-#     global total_window_time
-#     start = time.perf_counter()
 #     win_h, win_w = window_shape
-#     mat_h, mat_w = matrix.shape[1], matrix.shape[2]
-#
-#     out_c = matrix.shape[0]
+#     out_c, mat_h, mat_w = matrix.shape
 #     out_h = mat_h - win_h + 1
 #     out_w = mat_w - win_w + 1
-#     windows = np.empty((out_c, out_h * out_w, win_h, win_w), dtype=matrix.dtype)
-#     for c in range(out_c):
-#         idx = 0
-#         for i in range(out_h):
-#             for j in range(out_w):
-#                 windows[c, idx] = matrix[c, i:i + win_h, j:j + win_w]
-#                 idx += 1
-#     dt = time.perf_counter() - start
-#     total_window_time += dt
+#
+#     # Strides for moving through matrix
+#     stride_c, stride_h, stride_w = matrix.strides
+#
+#     # Shape of output: (channels, out_h, out_w, win_h, win_w)
+#     shape = (out_c, out_h, out_w, win_h, win_w)
+#     strides = (stride_c, stride_h, stride_w, stride_h, stride_w)
+#
+#     windows = as_strided(matrix, shape=shape, strides=strides).reshape(out_c, out_h * out_h, win_h, win_w)
 #     return windows
+
+
+def get_windows(window_shape, matrix):
+    win_h, win_w = window_shape
+    mat_h, mat_w = matrix.shape[1], matrix.shape[2]
+
+    out_c = matrix.shape[0]
+    out_h = mat_h - win_h + 1
+    out_w = mat_w - win_w + 1
+    windows = np.empty((out_c, out_h * out_w, win_h, win_w), dtype=matrix.dtype)
+    for c in range(out_c):
+        idx = 0
+        for i in range(out_h):
+            for j in range(out_w):
+                windows[c, idx] = matrix[c, i:i + win_h, j:j + win_w]
+                idx += 1
+    return windows
 
 
 class Dense:
@@ -72,6 +73,7 @@ class Dense:
             dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
         self.gradient += dc_dz * prev_layer_a[:, np.newaxis]
         dc_da = np.dot(dc_dz, self.weights.T)
+
         return dc_da
 
     def update_weights(self, learning_rate):
@@ -126,6 +128,8 @@ class Convolution:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
+        global total_convolution_time
+        t0 = time.perf_counter()
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
 
         # Transpose so that its (window_num, channel_num, k_h, k_w) this way it matches the kernels and math can be done on it easily.
@@ -134,9 +138,12 @@ class Convolution:
         z_data = np.tensordot(windows, self.kernels, axes=([1, 2, 3], [1, 2, 3])).T.flatten()
 
         a_data = self.activation_function(z_data)
+        total_convolution_time += time.perf_counter() - t0
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        global total_convolution_time, dc_da_time
+        t0 = time.perf_counter()
         dc_da = dc_da.reshape((self.kernel_num, self.output_num))
         this_layer_z = this_layer_z.reshape((self.kernel_num, self.output_num))
         prev_layer_a = prev_layer_a.reshape(self.input_shape)
@@ -160,15 +167,21 @@ class Convolution:
         # Calculate new dc_da
         # dc_dz is (kernel_num, output_num)
         # dz_da is (kernel_num, output_num, input_num)
-        # Currently the slowest operation because the matrices are so big.
-        dc_da = np.einsum('ko,koi->i', dc_dz, self.dz_da)
+        t1 = time.perf_counter()
+        dc_da = np.dot(dc_dz.reshape(-1), self.dz_da.reshape(-1, self.input_num))
+        dc_da_time += time.perf_counter() - t1
+
+        total_convolution_time += time.perf_counter() - t0
 
         return dc_da.flatten()
 
     def update_weights(self, learning_rate):
+        global dc_da_time
         self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape))
         self.gradient = np.zeros(self.gradient_size)
 
+        # dz_da will be (kernel_num, output_num, input_num) because it tracks how the input affects
+        # the output, and output is (kernel_num, output_num)
         self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
         for k in range(self.kernel_num):
             for y in range(self.output_shape[0]):
@@ -200,10 +213,14 @@ class MaxPooling:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
+        global total_pooling_time
+        t0 = time.perf_counter()
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
 
         a_data = np.zeros(self.output_shape)
+        windows = np.zeros((self.output_num, *self.kernel_shape))
 
+        idx = 0
         for y in range(self.output_shape[1]):
             for x in range(self.output_shape[2]):
                 stride_y = y * self.stride
@@ -211,26 +228,35 @@ class MaxPooling:
                 lower_bounds = (stride_y, stride_x)
                 upper_bounds = (min(stride_y + self.kernel_shape[0], prev_layer_activation.shape[1]), min(stride_x + self.kernel_shape[1], prev_layer_activation.shape[2]))
                 for c in range(self.output_shape[0]):
-                    a_data[c, y, x] += np.max(prev_layer_activation[c, lower_bounds[0]:upper_bounds[0], lower_bounds[1]:upper_bounds[1]])
+                    window = prev_layer_activation[c, lower_bounds[0]:upper_bounds[0], lower_bounds[1]:upper_bounds[1]]
+                    windows[idx] = window
+                    a_data[c, y, x] += np.max(window)
+                    idx += 1
 
-        return a_data, a_data
+        total_pooling_time += time.perf_counter() - t0
+        return windows, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        prev_layer_a = prev_layer_a.reshape(self.input_shape)
+        global total_pooling_time
+        t0 = time.perf_counter()
 
         new_dc_da = np.zeros(self.input_shape)
         dc_da = dc_da.reshape(self.output_shape)
+        idx = 0
         for y in range(self.output_shape[1]):
             for x in range(self.output_shape[2]):
                 stride_y = y * self.stride
                 stride_x = x * self.stride
-                lower_bounds = (stride_y, stride_x)
-                upper_bounds = (min(stride_y + self.kernel_shape[0], prev_layer_a.shape[1]), min(stride_x + self.kernel_shape[1], prev_layer_a.shape[2]))
+                # lower_bounds = (stride_y, stride_x)
+                # upper_bounds = (min(stride_y + self.kernel_shape[0], prev_layer_a.shape[1]), min(stride_x + self.kernel_shape[1], prev_layer_a.shape[2]))
                 for c in range(self.output_shape[0]):
-                    window = prev_layer_a[c, lower_bounds[0]:upper_bounds[0], lower_bounds[1]:upper_bounds[1]]
+                    # window = prev_layer_a[c, lower_bounds[0]:upper_bounds[0], lower_bounds[1]:upper_bounds[1]]
+                    window = this_layer_z[idx]
                     max_index = np.unravel_index(np.argmax(window), window.shape)
                     new_dc_da[c, stride_y + max_index[0], stride_x + max_index[1]] += dc_da[c, y, x]
+                    idx += 1
 
+        total_pooling_time += time.perf_counter() - t0
         return new_dc_da.flatten()
 
     def update_weights(self, learning_rate):

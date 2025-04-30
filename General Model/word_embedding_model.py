@@ -1,6 +1,6 @@
 import model
 import layers
-import activation_functions
+import model_functions
 import numpy as np
 from numpy.linalg import norm
 import re
@@ -63,14 +63,14 @@ def load_data(filename, context_window):
     data = []
     labels = []
 
-    # middle_word_index = context_window // 2
-    middle_word_index = context_window - 1
+    middle_word_index = context_window // 2
+    # middle_word_index = context_window - 1
 
     word_len = len(one_hot_encoded)
     index = 0
     while word_len - index >= context_window:
-        # data.append(sentence[index:index + middle_word_index] + sentence[index + middle_word_index + 1: index + 2 * middle_word_index + 1])
-        data.append(one_hot_encoded[index:index + middle_word_index])
+        data.append(one_hot_encoded[index:index + middle_word_index] + one_hot_encoded[index + middle_word_index + 1: index + 2 * middle_word_index + 1])
+        # data.append(one_hot_encoded[index:index + middle_word_index])
         labels.append(one_hot_encoded[index + middle_word_index])
         index += 1
 
@@ -78,10 +78,10 @@ def load_data(filename, context_window):
 
 
 def main():
-    context_window = 11
-    embedding_dimension = 64
+    context_window = 7
+    embedding_dimension = 50
 
-    word_data, labels, vocab = load_data("embedding_data_test.txt", context_window)
+    word_data, labels, vocab = load_data("embedding_data.txt", context_window)
     vocab_size = len(vocab)
 
     print(f"Amount of data: {len(labels)}")
@@ -89,24 +89,25 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/prediction_model_3")
+    embedding_model = model.Model.load("Models/better_embedding")
     # embedding_model = model.Model(
+    #     model_functions.categorical_entropy,
     #     (context_window - 1, vocab_size),
-    #     layers.Embedding(embedding_dimension, activation_functions.relu, activation_functions.relu_derivative),
-    #     layers.Dense(vocab_size, activation_functions.softmax, activation_functions.softmax_derivative)
+    #     layers.Embedding(embedding_dimension, model_functions.relu),
+    #     layers.Dense(vocab_size, model_functions.softmax)
     # )
 
-    # embedding_weights = embedding_model.layers[0].weights
-    #
-    # word_to_index = {word: i for i, word in enumerate(vocab)}
-    #
-    # word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
-    #
-    # print(most_similar("pets", word_vectors, 10))
+    embedding_weights = embedding_model.layers[0].weights
 
-    embedding_model.fit(word_data, labels, 50, vocab_size * 0.12)
+    word_to_index = {word: i for i, word in enumerate(vocab)}
 
-    embedding_model.save("Models/prediction_model_3")
+    word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
+
+    print(most_similar("monarch", word_vectors))
+
+    # embedding_model.fit(word_data, labels, 5, 0.02, 1)
+
+    # embedding_model.save("Models/better_embedding")
 
 
 if __name__ == "__main__":

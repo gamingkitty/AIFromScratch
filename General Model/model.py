@@ -1,5 +1,6 @@
 import numpy as np
 import layers
+import model_functions
 import pickle
 
 
@@ -11,6 +12,7 @@ class Model:
         self.layers = model_layers
 
         self.loss = loss_function
+        self.final_dc_da = None
 
         prev_output_shape = input_shape
         for layer in self.layers:
@@ -47,6 +49,7 @@ class Model:
         dc_da = self.loss.derivative(a_data[-1], expected_output) * reward_mult
         for i in reversed(range(len(self.layers))):
             dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], dc_da)
+        self.final_dc_da = dc_da
 
     def fit(self, data, labels, epochs, learning_rate, batch_size=1, shuffle_data=True, console_updates=True, reward_mults=None):
         if console_updates:
@@ -60,24 +63,24 @@ class Model:
             if shuffle_data:
                 indices = np.arange(data_size)
                 np.random.shuffle(indices)
-                data, labels, reward_mults = data[indices], labels[indices] ,reward_mults[indices]
+                data, labels, reward_mults = data[indices], labels[indices], reward_mults[indices]
 
             total_loss = 0
             total_correct = 0
             for j in range(data_size):
                 z_data, a_data = self.forward_propagate(data[j])
-                total_loss += self.loss(labels[j], a_data[-1])
+                total_loss += self.loss(a_data[-1], labels[j])
                 total_correct += np.argmax(a_data[-1]) == np.argmax(labels[j])
                 self.backwards_propagate(z_data, a_data, labels[j], reward_mults[j])
 
                 if j % batch_size == 0 and j != 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate)
-                # if j % 500 == 0 and j != 0:
+                # if j % 10 == 0 and j != 0:
                 #     print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
-                #     print(f"Total convolution time: {layers.total_convolution_time:.6f}")
-                #     print(f"Total dc da time: {layers.dc_da_time}")
-                #     print(f"Total pooling time: {layers.total_pooling_time:.6f}")
+                    # print(f"Total convolution time: {layers.total_convolution_time:.6f}")
+                    # print(f"Total dc da time: {layers.dc_da_time}")
+                    # print(f"Total pooling time: {layers.total_pooling_time:.6f}")
 
             for layer in self.layers:
                 layer.update_weights(learning_rate)

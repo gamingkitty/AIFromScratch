@@ -53,9 +53,11 @@ def softmax_derivative(x):
 
     diagonal_softmax = np.diag(softmax_vals)
 
-    jacobian = diagonal_softmax - softmax_outer
+    return diagonal_softmax - softmax_outer
 
-    return jacobian
+
+def f_linear(x):
+    return x
 
 
 def mse_loss(output, expected):
@@ -79,11 +81,13 @@ def categorical_entropy_loss_derivative(output, expected):
     gradient = -expected / output_clipped
     return gradient
 
+
 # Activation functions
 relu = Activation(f_relu, relu_derivative)
 tanh = Activation(f_tanh, tanh_derivative)
 softmax = Activation(f_softmax, softmax_derivative, False)
+linear = Activation(f_linear, f_linear)
 
 # Loss functions
 mse = Loss(mse_loss, mse_loss_derivative)
-categorical_entropy = Loss(categorical_entropy_loss, categorical_entropy_loss_derivative)
+cross_entropy = Loss(categorical_entropy_loss, categorical_entropy_loss_derivative)

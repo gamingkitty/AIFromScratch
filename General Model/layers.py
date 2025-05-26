@@ -2,11 +2,14 @@ import math
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import time
+import model_functions
 
 
 total_convolution_time = 0
 total_pooling_time = 0
 dc_da_time = 0
+
+times = 0
 
 
 # def get_windows(window_shape, matrix):
@@ -51,29 +54,30 @@ class Dense:
         self.gradient = np.array([])
 
     def init_weights(self, previous_layer_output_shape):
-        self.weights = np.random.rand(np.prod(previous_layer_output_shape), self.neuron_num) - 0.5
+        in_num = np.prod(previous_layer_output_shape)
+        out_num = self.neuron_num
+        weight_limit = math.sqrt(6 / (in_num + out_num))
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num + 1, out_num))
         self.gradient = np.zeros_like(self.weights)
 
     def predict(self, prev_layer_activation):
-        return self.activation_function(np.dot(prev_layer_activation.flatten(), self.weights))
+        return self.activation_function(np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights))
 
     def forward_pass(self, prev_layer_activation):
-        z_data = np.dot(prev_layer_activation.flatten(), self.weights)
+        z_data = np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights)
         a_data = self.activation_function(z_data)
 
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        prev_layer_a = prev_layer_a.flatten()
-        # Need to return dc_da (error signal)
-        # Can store gradient in the class
+        prev_layer_a = np.append(prev_layer_a.flatten(), 1)
         if self.activation_function.is_elementwise:
             dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
         else:
             dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
         self.gradient += dc_dz * prev_layer_a[:, np.newaxis]
-        dc_da = np.dot(dc_dz, self.weights.T)
-
+        # Exclude bias neuron from prev layer because it is not an output of that layer.
+        dc_da = np.dot(dc_dz, self.weights[:-1].T)
         return dc_da
 
     def update_weights(self, learning_rate):
@@ -193,6 +197,7 @@ class Convolution:
         return self.true_output_shape
 
 
+# Very slow currently
 class MaxPooling:
     def __init__(self, kernel_shape, stride, input_shape=None):
         self.kernel_shape = kernel_shape
@@ -266,6 +271,7 @@ class MaxPooling:
         return self.output_shape
 
 
+# Outdated
 class Embedding:
     def __init__(self, embedding_dimension, activation_function, input_shape=None):
         self.neuron_num = embedding_dimension

@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/cross_entropy_test")
+    ai_model = model.Model.load("Models/new_dense_1")
 
     image = np.zeros((28, 28))
 
@@ -165,7 +165,7 @@ def main():
                     label = np.zeros(10)
                     label[number_pressed] = 1
                     z_data, a_data = ai_model.forward_propagate(image.T)
-                    ai_model.backwards_propagate(z_data, a_data, label)
+                    ai_model.backwards_propagate(z_data, a_data, label, 1)
                     image_2 = ai_model.final_dc_da
                     image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
                     image_2 = image_2.reshape((28, 28)).T
@@ -186,14 +186,14 @@ def main():
             label = np.zeros(10)
             label[number_pressed] = 1
             z_data, a_data = ai_model.forward_propagate(image.T)
-            ai_model.backwards_propagate(z_data, a_data, label)
+            ai_model.backwards_propagate(z_data, a_data, label, 1)
             image_2 = ai_model.final_dc_da
             image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
             image_2 = image_2.reshape((28, 28)).T
 
             image_2 = 0.3 - image_2
             image_2 = np.maximum(image_2, 0)
-            image += image_2 * 0.5
+            image += image_2 * 0.25
 
             image = (image - image.min()) / (image.max() - image.min())
 

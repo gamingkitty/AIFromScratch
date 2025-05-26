@@ -20,48 +20,41 @@ def load_data():
 
 
 def main():
-    save_as = "Models/convolution_fast"
+    save_as = "Models/test"
 
     train_images, train_labels, test_images, test_labels = load_data()
-    possible_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
-    ohe_train_labels = np.zeros((len(train_labels), len(possible_labels)))
-    ohe_test_labels = np.zeros((len(test_labels), len(possible_labels)))
-
-    for i in range(len(ohe_train_labels)):
-        ohe_train_labels[i][train_labels[i]] = 1
-
-    for i in range(len(ohe_test_labels)):
-        ohe_test_labels[i][test_labels[i]] = 1
+    ohe_train_labels = np.eye(10)[train_labels]
+    ohe_test_labels = np.eye(10)[test_labels]
 
     # ai_model = model.Model.load(save_as)
-    # ai_model = model.Model(
-    #     model_functions.categorical_entropy,
-    #     (28, 28),
-    #     layers.Dense(64, model_functions.relu),
-    #     layers.Dense(32, model_functions.relu),
-    #     layers.Dense(10, model_functions.softmax)
-    # )
     ai_model = model.Model(
-        model_functions.categorical_entropy,
-        (1, 28, 28),
-        layers.Convolution(4, (3, 3), model_functions.relu),
-        # layers.MaxPooling((2, 2), 2),
-
-        layers.Convolution(8, (3, 3), model_functions.relu),
-        # layers.MaxPooling((2, 2), 2),
-        # layers.Dense(128, model_functions.relu),
+        model_functions.cross_entropy,
+        (28, 28),
+        layers.Dense(128, model_functions.relu),
         layers.Dense(64, model_functions.relu),
-        layers.Dropout(0.5),
-
         layers.Dense(10, model_functions.softmax)
     )
+    # ai_model = model.Model(
+    #     model_functions.categorical_entropy,
+    #     (1, 28, 28),
+    #     # layers.Convolution(4, (3, 3), model_functions.relu),
+    #     # layers.MaxPooling((2, 2), 2),
+    #
+    #     # layers.Convolution(8, (3, 3), model_functions.relu),
+    #     # layers.MaxPooling((2, 2), 2),
+    #     # layers.Dense(128, model_functions.relu),
+    #     layers.Dense(64, model_functions.relu),
+    #     layers.Dropout(0.5),
+    #
+    #     layers.Dense(10, model_functions.softmax)
+    # )
 
     # accuracy = ai_model.test(test_images, ohe_test_labels)
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 3, 0.002, 1)
+    ai_model.fit(train_images, ohe_train_labels, 10, 0.01, 1)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

@@ -81,7 +81,7 @@ def main():
     context_window = 7
     embedding_dimension = 50
 
-    word_data, labels, vocab = load_data("embedding_data.txt", context_window)
+    word_data, labels, vocab = load_data("embedding_data_test.txt", context_window)
     vocab_size = len(vocab)
 
     print(f"Amount of data: {len(labels)}")
@@ -89,11 +89,11 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/better_embedding")
+    embedding_model = model.Model.load("Models/new_embedding_test")
     # embedding_model = model.Model(
-    #     model_functions.categorical_entropy,
+    #     model_functions.cross_entropy,
     #     (context_window - 1, vocab_size),
-    #     layers.Embedding(embedding_dimension, model_functions.relu),
+    #     layers.Embedding(embedding_dimension, model_functions.linear),
     #     layers.Dense(vocab_size, model_functions.softmax)
     # )
 
@@ -103,11 +103,12 @@ def main():
 
     word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
 
-    print(most_similar("monarch", word_vectors))
+    print(most_similar("cat", word_vectors))
+    print(analogy("kitten", "puppy", "cat", word_vectors, 10))
 
-    # embedding_model.fit(word_data, labels, 5, 0.02, 1)
-
-    # embedding_model.save("Models/better_embedding")
+    # embedding_model.fit(word_data, labels, 10, 0.003, 1)
+    # #
+    # embedding_model.save("Models/new_embedding_test")
 
 
 if __name__ == "__main__":

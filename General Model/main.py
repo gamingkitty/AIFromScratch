@@ -20,30 +20,31 @@ def load_data():
 
 
 def main():
-    save_as = "Models/test"
+    save_as = "Models/test_conv"
 
     train_images, train_labels, test_images, test_labels = load_data()
 
     ohe_train_labels = np.eye(10)[train_labels]
     ohe_test_labels = np.eye(10)[test_labels]
 
-    # ai_model = model.Model.load(save_as)
-    ai_model = model.Model(
-        model_functions.cross_entropy,
-        (28, 28),
-        layers.Dense(128, model_functions.relu),
-        layers.Dense(64, model_functions.relu),
-        layers.Dense(10, model_functions.softmax)
-    )
+    ai_model = model.Model.load(save_as)
     # ai_model = model.Model(
-    #     model_functions.categorical_entropy,
-    #     (1, 28, 28),
-    #     # layers.Convolution(4, (3, 3), model_functions.relu),
-    #     # layers.MaxPooling((2, 2), 2),
-    #
-    #     # layers.Convolution(8, (3, 3), model_functions.relu),
-    #     # layers.MaxPooling((2, 2), 2),
+    #     model_functions.cross_entropy,
+    #     (28, 28),
     #     # layers.Dense(128, model_functions.relu),
+    #     layers.Dense(64, model_functions.relu),
+    #     layers.Dropout(0.5),
+    #     layers.Dense(10, model_functions.softmax)
+    # )
+    # ai_model = model.Model(
+    #     model_functions.cross_entropy,
+    #     (1, 28, 28),
+    #     layers.Convolution(32, (3, 3), model_functions.relu),
+    #     layers.MaxPooling((2, 2), 2),
+    #
+    #     layers.Convolution(64, (3, 3), model_functions.relu),
+    #     # layers.MaxPooling((2, 2), 2),
+    #     layers.Dense(128, model_functions.relu),
     #     layers.Dense(64, model_functions.relu),
     #     layers.Dropout(0.5),
     #
@@ -54,7 +55,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 10, 0.01, 1)
+    ai_model.fit(train_images, ohe_train_labels, 1, 0.01, 32)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)

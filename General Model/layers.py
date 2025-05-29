@@ -8,6 +8,7 @@ import model_functions
 total_convolution_time = 0
 total_pooling_time = 0
 dc_da_time = 0
+dz_da_time = 0
 
 times = 0
 
@@ -98,19 +99,18 @@ class Convolution:
         self.activation_function = activation_function
         self.kernels = None
         self.kernel_num = kernel_num
+        self.biases = None
         self.output_shape = ()
         self.output_num = 0
         self.gradient = None
         self.gradient_size = None
+        self.bias_gradient = None
         self.true_output_shape = None
         self.dz_da = None
 
     def init_weights(self, previous_layer_output_shape):
         self.channel_kernel_shape = (previous_layer_output_shape[0], *self.kernel_shape)
         self.kernel_size = np.prod(self.channel_kernel_shape)
-        self.kernels = np.random.rand(self.kernel_num, *self.channel_kernel_shape) - 0.5
-        self.gradient_size = self.kernel_size * self.kernel_num
-        self.gradient = np.zeros(self.gradient_size)
 
         if self.input_shape is None:
             self.input_shape = previous_layer_output_shape
@@ -119,6 +119,15 @@ class Convolution:
         self.output_shape = ((self.input_shape[1] - self.kernel_shape[0]) + 1, (self.input_shape[2] - self.kernel_shape[1]) + 1)
         self.true_output_shape = (self.kernel_num, *self.output_shape)
         self.output_num = np.prod(self.output_shape)
+
+        in_num = np.prod(self.channel_kernel_shape)
+        weight_limit = math.sqrt(2 / in_num)
+        self.kernels = np.random.uniform(-weight_limit, weight_limit, size=(self.kernel_num, *self.channel_kernel_shape))
+        self.biases = np.zeros(self.kernel_num)
+
+        self.gradient_size = self.kernel_size * self.kernel_num
+        self.gradient = np.zeros(self.gradient_size)
+        self.bias_gradient = np.zeros(self.kernel_num)
 
         self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
         for k in range(self.kernel_num):
@@ -139,7 +148,7 @@ class Convolution:
         # Transpose so that its (window_num, channel_num, k_h, k_w) this way it matches the kernels and math can be done on it easily.
         windows = np.transpose(get_windows(self.kernel_shape, prev_layer_activation), (1, 0, 2, 3))
 
-        z_data = np.tensordot(windows, self.kernels, axes=([1, 2, 3], [1, 2, 3])).T.flatten()
+        z_data = (np.tensordot(windows, self.kernels, axes=([1, 2, 3], [1, 2, 3])).T + self.biases[:, np.newaxis]).flatten()
 
         a_data = self.activation_function(z_data)
         total_convolution_time += time.perf_counter() - t0
@@ -168,6 +177,8 @@ class Convolution:
         # output is kernel_num, kernel_size
         self.gradient += np.tensordot(dc_dz, dz_dw, axes=([1], [1])).flatten()
 
+        self.bias_gradient += np.sum(dc_dz, axis=1)
+
         # Calculate new dc_da
         # dc_dz is (kernel_num, output_num)
         # dz_da is (kernel_num, output_num, input_num)
@@ -180,18 +191,23 @@ class Convolution:
         return dc_da.flatten()
 
     def update_weights(self, learning_rate):
-        global dc_da_time
-        self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape))
+        global dz_da_time
+        self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape)) / self.output_num
+        self.biases -= learning_rate * self.bias_gradient / self.output_num
+        self.bias_gradient = np.zeros(self.kernel_num)
         self.gradient = np.zeros(self.gradient_size)
 
         # dz_da will be (kernel_num, output_num, input_num) because it tracks how the input affects
         # the output, and output is (kernel_num, output_num)
+        # Very slow right now, should look for speed up
+        t0 = time.perf_counter()
         self.dz_da = np.zeros((self.kernel_num, self.output_num, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
         for k in range(self.kernel_num):
             for y in range(self.output_shape[0]):
                 for x in range(self.output_shape[1]):
                     self.dz_da[k, y * self.output_shape[1] + x, :, y:y + self.kernel_shape[0], x:x + self.kernel_shape[1]] = self.kernels[k]
         self.dz_da = self.dz_da.reshape(self.kernel_num, self.output_num, -1)
+        dz_da_time += time.perf_counter() - t0
 
     def get_output_shape(self):
         return self.true_output_shape
@@ -271,7 +287,49 @@ class MaxPooling:
         return self.output_shape
 
 
-# Outdated
+class Dense:
+    def __init__(self, neuron_num, activation_function):
+        self.neuron_num = neuron_num
+        self.activation_function = activation_function
+        self.weights = np.array([])
+        self.gradient = np.array([])
+
+    def init_weights(self, previous_layer_output_shape):
+        in_num = np.prod(previous_layer_output_shape)
+        out_num = self.neuron_num
+        weight_limit = math.sqrt(6 / (in_num + out_num))
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num + 1, out_num))
+        self.gradient = np.zeros_like(self.weights)
+
+    def predict(self, prev_layer_activation):
+        return self.activation_function(np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights))
+
+    def forward_pass(self, prev_layer_activation):
+        z_data = np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights)
+        a_data = self.activation_function(z_data)
+
+        return z_data, a_data
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        prev_layer_a = np.append(prev_layer_a.flatten(), 1)
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+        else:
+            dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
+        self.gradient += dc_dz * prev_layer_a[:, np.newaxis]
+        # Exclude bias neuron from prev layer because it is not an output of that layer.
+        dc_da = np.dot(dc_dz, self.weights[:-1].T)
+        return dc_da
+
+    def update_weights(self, learning_rate):
+        self.weights -= learning_rate * self.gradient
+        self.gradient = np.zeros_like(self.weights)
+
+    def get_output_shape(self):
+        return self.neuron_num, 1
+
+
+# Assumes input is something one hot encoded.
 class Embedding:
     def __init__(self, embedding_dimension, activation_function, input_shape=None):
         self.neuron_num = embedding_dimension
@@ -283,7 +341,10 @@ class Embedding:
     def init_weights(self, previous_layer_output_shape):
         if self.input_shape is None:
             self.input_shape = previous_layer_output_shape
-        self.weights = np.random.rand(self.input_shape[1], self.neuron_num) - 0.5
+        in_num = np.prod(self.input_shape)
+        out_num = self.neuron_num
+        weight_limit = math.sqrt(6 / (in_num + out_num))
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.input_shape[1], self.neuron_num))
         self.gradient = np.zeros_like(self.weights)
 
     def predict(self, prev_layer_activation):
@@ -292,20 +353,21 @@ class Embedding:
 
     def forward_pass(self, prev_layer_activation):
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
-        z_data = np.sum(np.dot(prev_layer_activation, self.weights), axis=0)
+        z_data = np.sum(self.weights[np.argmax(prev_layer_activation, axis=1)], axis=0)
         a_data = self.activation_function(z_data)
 
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # Need to return dc_da (error signal)
-        # Can store gradient in the class
         if self.activation_function.is_elementwise:
             dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
         else:
             dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
 
-        self.gradient += dc_dz * np.sum(prev_layer_a.reshape(self.input_shape), axis=0)[:, np.newaxis]
+        # Old gradient code that didn't assume ohe.
+        # self.gradient += dc_dz * np.sum(prev_layer_a.reshape(self.input_shape), axis=0)[:, np.newaxis]
+        self.gradient[np.argmax(prev_layer_a.reshape(self.input_shape), axis=1)] += dc_dz
+
         dc_da = np.dot(dc_dz, self.weights.T)
         return dc_da
 
@@ -317,6 +379,7 @@ class Embedding:
         return self.neuron_num, 1
 
 
+# Change so that doesnt store self.dz_da
 class Dropout:
     def __init__(self, dropout_percent):
         self.dropout_percent = dropout_percent

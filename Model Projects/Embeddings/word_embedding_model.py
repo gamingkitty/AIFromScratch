@@ -1,6 +1,4 @@
-import model
-import layers
-import model_functions
+from scratch_model import model
 import numpy as np
 from numpy.linalg import norm
 import re

@@ -1,6 +1,6 @@
 import numpy as np
-import layers
-import model_functions
+from scratch_model import layers
+from scratch_model import model_functions
 import pickle
 
 
@@ -74,18 +74,20 @@ class Model:
                 total_correct += np.argmax(a_data[-1]) == np.argmax(labels[j])
                 self.backwards_propagate(z_data, a_data, labels[j], reward_mults[j])
 
-                if j % batch_size == 0 and j != 0:
+                if (j + 1) % batch_size == 0:
                     for layer in self.layers:
-                        layer.update_weights(learning_rate)
-                # if j % 500 == 0 and j != 0:
-                #     print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
-                #     print(f"Total convolution time: {layers.total_convolution_time:.6f}")
-                #     print(f"Total dc da time: {layers.dc_da_time}")
-                #     print(f"Total dz da time: {layers.dz_da_time}")
-                #     print(f"Total pooling time: {layers.total_pooling_time:.6f}")
+                        layer.update_weights(learning_rate / batch_size)
+                if (j + 1) % 50 == 0 and console_updates:
+                    print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
+                    print(f"Total correct: {total_correct}")
+                    print(f"Total convolution time: {layers.total_convolution_time:.6f}")
+                    print(f"Total dc da time: {layers.dc_da_time}")
+                    print(f"Total dz da time: {layers.dz_da_time}")
+                    print(f"Total pooling time: {layers.total_pooling_time:.6f}")
 
-            for layer in self.layers:
-                layer.update_weights(learning_rate)
+            if data_size % batch_size > 0:
+                for layer in self.layers:
+                    layer.update_weights(learning_rate / (data_size % batch_size))
 
             if console_updates:
                 print(f"Finished epoch {i + 1} with an average loss of {(total_loss / data_size):.6f} and {(100 * (total_correct / data_size)):.4f}% accuracy.")

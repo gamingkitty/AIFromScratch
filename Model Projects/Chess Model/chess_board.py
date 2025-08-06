@@ -51,11 +51,11 @@ class Board:
         is_piece_black = is_black(piece)
         if ((piece - 1) % 6 + 1) == wp and ((is_piece_black and to_pos[0] == 7) or (not is_piece_black and to_pos[0] == 0)):
             # Make pawn into queen if it is at the end of the board
+            # Can add other options later
             self.board[to_pos] += 4
 
         self.flip_board = self.board[::-1, ::-1]
         self.opponent_board = np.where(self.flip_board > 6, self.flip_board - 6, np.where((self.flip_board != 0) & (self.flip_board <= 6), self.flip_board + 6, self.flip_board))
-
 
     def get_legal_moves(self, is_player_black):
         moves = []
@@ -67,7 +67,6 @@ class Board:
                     to_moves = self.get_legal_moves_piece(from_move)
                     for move in to_moves:
                         moves.append((from_move, move))
-
 
         return moves
 

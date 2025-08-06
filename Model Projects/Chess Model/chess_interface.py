@@ -2,9 +2,10 @@ import random
 import sys
 
 import pygame
-import model
+from scratch_model import model
 import chess_board
 import numpy as np
+
 
 def get_ohe_board(board):
     new_board = np.zeros((8, 8, 7))

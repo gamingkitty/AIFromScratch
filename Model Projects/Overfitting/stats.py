@@ -1,6 +1,6 @@
-import model
-import layers
-import model_functions
+from scratch_model import model
+from scratch_model import layers
+from scratch_model import model_functions
 import numpy as np
 import pickle
 from keras.datasets import mnist

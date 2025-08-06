@@ -2,7 +2,7 @@ import time
 import textwrap
 import numpy as np
 import re
-import model
+from scratch_model import model
 import sys
 
 

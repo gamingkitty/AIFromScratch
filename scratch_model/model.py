@@ -77,13 +77,13 @@ class Model:
                 if (j + 1) % batch_size == 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate / batch_size)
-                if (j + 1) % 50 == 0 and console_updates:
-                    print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
-                    print(f"Total correct: {total_correct}")
-                    print(f"Total convolution time: {layers.total_convolution_time:.6f}")
-                    print(f"Total dc da time: {layers.dc_da_time}")
-                    print(f"Total dz da time: {layers.dz_da_time}")
-                    print(f"Total pooling time: {layers.total_pooling_time:.6f}")
+                # if (j + 1) % 50 == 0 and console_updates:
+                #     print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
+                #     print(f"Total correct: {total_correct}")
+                    # print(f"Total convolution time: {layers.total_convolution_time:.6f}")
+                    # print(f"Total dc da time: {layers.dc_da_time}")
+                    # print(f"Total dz da time: {layers.dz_da_time}")
+                    # print(f"Total pooling time: {layers.total_pooling_time:.6f}")
 
             if data_size % batch_size > 0:
                 for layer in self.layers:
@@ -101,6 +101,12 @@ class Model:
             if np.argmax(prediction) == np.argmax(labels[i]):
                 total_correct += 1
         return total_correct / len(data)
+
+    def get_param_num(self):
+        param_num = 0
+        for layer in self.layers:
+            param_num += layer.count_params()
+        return param_num
 
     def save(self, filename):
         with open(filename + ".pkl", "wb") as file:

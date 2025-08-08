@@ -88,6 +88,9 @@ class Dense:
     def get_output_shape(self):
         return self.neuron_num, 1
 
+    def count_params(self):
+        return np.prod(self.weights.shape)
+
 
 class Convolution:
     def __init__(self, kernel_num, kernel_shape, activation_function, input_shape=None):
@@ -214,6 +217,9 @@ class Convolution:
     def get_output_shape(self):
         return self.true_output_shape
 
+    def count_params(self):
+        return np.prod(self.kernels.shape) + np.prod(self.biases.shape)
+
 
 # Very slow currently
 class MaxPooling:
@@ -288,6 +294,9 @@ class MaxPooling:
     def get_output_shape(self):
         return self.output_shape
 
+    def count_params(self):
+        return 0
+
 
 # Assumes input is something one hot encoded.
 class Embedding:
@@ -343,6 +352,9 @@ class Embedding:
     def get_output_shape(self):
         return self.output_shape
 
+    def count_params(self):
+        return np.prod(self.weights.shape)
+
 
 # Change so that doesnt store self.dz_da
 class Dropout:
@@ -373,6 +385,9 @@ class Dropout:
 
     def get_output_shape(self):
         return self.input_shape
+
+    def count_params(self):
+        return 0
 
 
 # Currently returns entire sequence. Might add option in future to only return final output of layer.
@@ -502,3 +517,6 @@ class Recurrent:
 
     def get_output_shape(self):
         return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.input_weights.shape) + np.prod(self.hidden_weights.shape)

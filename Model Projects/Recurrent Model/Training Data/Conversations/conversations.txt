@@ -1,0 +1,436 @@
+>persona< Hey, are you free this weekend? >endoftext<
+>personb< Yeah, I think so. What's up? >endoftext<
+>persona< Want to go see that new movie? >endoftext<
+>personb< Sure! Which one were you thinking? >endoftext<
+
+
+
+>persona< Did you finish the history homework? >endoftext<
+>personb< Not yet, I’m stuck on question 5. >endoftext<
+>persona< Oh that one’s tricky. Want help? >endoftext<
+>personb< Yes please, that’d be great. >endoftext<
+
+
+
+>persona< What’s your favorite food? >endoftext<
+>personb< Probably sushi. You? >endoftext<
+>persona< I love tacos. Especially with extra cheese. >endoftext<
+>personb< Now I’m hungry. >endoftext<
+
+
+
+>persona< Do you like rain or sun more? >endoftext<
+>personb< Rain. It’s cozy. >endoftext<
+>persona< I like the sun. Makes me feel more awake. >endoftext<
+>personb< That’s fair. I just like staying in with tea. >endoftext<
+
+
+
+>persona< Knock knock. >endoftext<
+>personb< Who's there? >endoftext<
+>persona< Cow says. >endoftext<
+>personb< Cow says who? >endoftext<
+>persona< Cow says moooo! >endoftext<
+>personb< LOL nice one. >endoftext<
+
+
+
+>persona< Can you help me carry this box? >endoftext<
+>personb< Of course! Where’s it going? >endoftext<
+>persona< Just to the car. Thanks. >endoftext<
+>personb< No problem. Let’s go. >endoftext<
+
+
+
+>persona< I had the weirdest dream last night. >endoftext<
+>personb< What happened? >endoftext<
+>persona< I was flying, but then I turned into a chair. >endoftext<
+>personb< That’s... oddly poetic. >endoftext<
+
+
+
+>persona< Do you want to play a game later? >endoftext<
+>personb< Yeah! What game? >endoftext<
+>persona< I was thinking Minecraft. >endoftext<
+>personb< I’m in. Let’s build a castle. >endoftext<
+
+
+
+>persona< I think I lost my wallet. >endoftext<
+>personb< Oh no! When did you last see it? >endoftext<
+>persona< At the cafe, I think. >endoftext<
+>personb< Let’s go check together. >endoftext<
+
+
+
+>persona< This song is stuck in my head. >endoftext<
+>personb< Which one? >endoftext<
+>persona< That new one by Luna Skye. >endoftext<
+>personb< I love that song! So catchy. >endoftext<
+
+
+
+>persona< I forgot my charger at your place again. >endoftext<
+>personb< Seriously? That’s the third time. >endoftext<
+>persona< I know, I know. My brain’s just not working lately. >endoftext<
+>personb< I’ll bring it to school tomorrow. Try not to forget it this time. >endoftext<
+
+
+
+>persona< What do you think happens after we die? >endoftext<
+>personb< Whoa, deep question. I guess... maybe nothing. >endoftext<
+>persona< That scares me. I hope there's something more. >endoftext<
+>personb< Me too. I like to believe in some kind of peaceful afterlife. >endoftext<
+
+
+
+>persona< Are you mad at me? >endoftext<
+>personb< No, why? >endoftext<
+>persona< You’ve been kinda quiet all day. >endoftext<
+>personb< Oh. I’m just tired, not upset. Sorry if it seemed like that. >endoftext<
+
+
+
+>persona< Want to come over and bake cookies? >endoftext<
+>personb< Absolutely. I’ll bring chocolate chips. >endoftext<
+>persona< Perfect. You can help me clean up too. >endoftext<
+>personb< Wait... I didn’t agree to that part. >endoftext<
+
+
+
+>persona< This bus is taking forever. >endoftext<
+>personb< Classic. I should’ve just walked. >endoftext<
+>persona< You say that every time. Then you never walk. >endoftext<
+>personb< That’s because I’m lazy, not because I learn. >endoftext<
+
+
+
+>persona< I had to present in class today and totally blanked. >endoftext<
+>personb< Oh no! What did you do? >endoftext<
+>persona< I stood there for like 10 seconds and then read from my slides. >endoftext<
+>personb< Yikes. But hey, you still got through it. That’s what counts. >endoftext<
+
+
+
+>persona< What would you do if you won a million dollars? >endoftext<
+>personb< Easy. Pay off my mom’s debt and then travel. >endoftext<
+>persona< That’s really sweet. I think I’d build a big treehouse somewhere. >endoftext<
+>personb< You and your treehouses. Never change. >endoftext<
+
+
+
+>persona< Can we pretend today didn’t happen? >endoftext<
+>personb< That bad, huh? >endoftext<
+>persona< Spilled coffee on my pants, tripped in front of the office, forgot my notes... >endoftext<
+>personb< You’re living in a cartoon. >endoftext<
+>persona< Pretty sure I’m the punchline. >endoftext<
+
+
+
+>persona< I hate group projects. >endoftext<
+>personb< Same. Someone always does nothing. >endoftext<
+>persona< And guess who ends up doing all the work? >endoftext<
+>personb< Us. Every single time. >endoftext<
+
+
+
+>persona< What are you doing up so late? >endoftext<
+>personb< Couldn’t sleep. Mind won’t shut up. >endoftext<
+>persona< Want to talk about it? >endoftext<
+>personb< Not really. But thanks for asking. >endoftext<
+
+
+
+>persona< You ever just stare at the ceiling and question everything? >endoftext<
+>personb< Literally last night. Existential dread is my bedtime routine. >endoftext<
+>persona< Same. Ceiling fan knows all my secrets. >endoftext<
+>personb< It spins your thoughts around. >endoftext<
+
+
+
+>persona< My internet went out right in the middle of the match. >endoftext<
+>personb< Brutal. Did your team lose? >endoftext<
+>persona< I think so. I rage quit before I found out. >endoftext<
+>personb< That’s the spirit. >endoftext<
+
+
+
+>persona< Want to try that new ramen place Friday? >endoftext<
+>personb< Yes. I’ve been craving soup all week. >endoftext<
+>persona< Me too. It’s finally cold enough for it. >endoftext<
+>personb< Let’s go early so we don’t have to wait. >endoftext<
+
+
+
+>persona< I’m sorry for what I said earlier. >endoftext<
+>personb< It’s okay. I know you didn’t mean it. >endoftext<
+>persona< I really didn’t. I was just frustrated. >endoftext<
+>personb< We all have those moments. I forgive you. >endoftext<
+
+
+
+>persona< Why are oranges called oranges but lemons aren't called yellows? >endoftext<
+>personb< That’s actually a solid question. >endoftext<
+>persona< Right?? It bothers me way more than it should. >endoftext<
+>personb< Language is weird, man. >endoftext<
+
+
+
+>persona< I saw you dancing at the bus stop. >endoftext<
+>personb< No you didn’t. >endoftext<
+>persona< Oh I absolutely did. Full-on choreography. >endoftext<
+>personb< I regret nothing. >endoftext<
+
+
+
+>persona< You ever get that feeling like you’re missing something, but you don’t know what? >endoftext<
+>personb< Yeah, all the time. Like something’s just out of reach. >endoftext<
+>persona< It’s not even sad, just… empty. >endoftext<
+>personb< I know exactly what you mean. >endoftext<
+
+
+
+>persona< The moon looks huge tonight. >endoftext<
+>personb< Woah, it really does. Is it a supermoon or something? >endoftext<
+>persona< Maybe. Or just a really good night to look up. >endoftext<
+>personb< We should do this more often. >endoftext<
+
+
+
+>persona< Hi! What are you doing right now? >endoftext<
+>personb< I’m just at home, watching TV. >endoftext<
+>persona< Cool. I’m so bored. >endoftext<
+>personb< Want to talk for a bit? >endoftext<
+
+
+
+>persona< Do you want to go out later? >endoftext<
+>personb< Maybe. Where do you want to go? >endoftext<
+>persona< Just to the park or something. >endoftext<
+>personb< That sounds good to me. >endoftext<
+
+
+
+>persona< I am very hungry. >endoftext<
+>personb< Me too. What should we eat? >endoftext<
+>persona< Do you want pizza? >endoftext<
+>personb< Yes, I love pizza. >endoftext<
+
+
+
+>persona< Where are you? >endoftext<
+>personb< I’m on the bus. Be there soon. >endoftext<
+>persona< Okay, I will wait for you. >endoftext<
+>personb< Thanks. Sorry I’m late. >endoftext<
+
+
+
+>persona< What time is it? >endoftext<
+>personb< It’s 3:45 right now. >endoftext<
+>persona< Oh no, I’m late! >endoftext<
+>personb< Run! You can still make it. >endoftext<
+
+
+
+>persona< Can you help me with this? >endoftext<
+>personb< Sure, what is it? >endoftext<
+>persona< I don’t understand this part. >endoftext<
+>personb< Let’s look at it together. >endoftext<
+
+
+
+>persona< I have to go now. >endoftext<
+>personb< Okay. Talk to you later. >endoftext<
+>persona< Bye! >endoftext<
+>personb< Bye. >endoftext<
+
+
+
+>persona< What is your name? >endoftext<
+>personb< My name is Sam. >endoftext<
+>persona< Hi Sam, I’m Alex. >endoftext<
+>personb< Nice to meet you, Alex. >endoftext<
+
+
+
+>persona< I like your new shoes. >endoftext<
+>personb< Thanks! I just got them. >endoftext<
+>persona< Where did you buy them? >endoftext<
+>personb< At the mall. >endoftext<
+
+
+
+>persona< Is it hot outside? >endoftext<
+>personb< Yes, very hot. Don’t forget water. >endoftext<
+>persona< Thanks. I’ll take a bottle. >endoftext<
+>personb< Good idea. >endoftext<
+
+
+
+>persona< Are you coming to the party? >endoftext<
+>personb< Yes! I can’t wait. >endoftext<
+>persona< Me too. It’s going to be fun. >endoftext<
+>personb< I hope there’s cake. >endoftext<
+
+
+
+>persona< I am tired today. >endoftext<
+>personb< Same. I didn’t sleep well. >endoftext<
+>persona< Too much work? >endoftext<
+>personb< Yeah. So much to do this week. >endoftext<
+
+
+
+>persona< Can you see the stars tonight? >endoftext<
+>personb< Yes, the sky is very clear. >endoftext<
+>persona< I love nights like this. >endoftext<
+>personb< Me too. >endoftext<
+
+
+
+>persona< Do you have a dog? >endoftext<
+>personb< No, but I want one. >endoftext<
+>persona< Dogs are so cute. >endoftext<
+>personb< Yeah. I like big dogs the most. >endoftext<
+
+
+
+>persona< I saw a cat today. >endoftext<
+>personb< Was it your cat? >endoftext<
+>persona< No, just a cat on the street. >endoftext<
+>personb< Was it nice? >endoftext<
+>persona< It ran away. >endoftext<
+
+
+
+>persona< Do you play games on your phone? >endoftext<
+>personb< Yes, all the time. >endoftext<
+>persona< What’s your favorite? >endoftext<
+>personb< I like puzzle games. You? >endoftext<
+>persona< Racing games! They’re fast and fun. >endoftext<
+
+
+
+>persona< What do you want to do today? >endoftext<
+>personb< Maybe go for a walk. >endoftext<
+>persona< Sounds good. Let’s go. >endoftext<
+>personb< Okay, meet you outside in 10? >endoftext<
+>persona< Deal. >endoftext<
+
+
+
+>persona< I think I forgot my book. >endoftext<
+>personb< At school? >endoftext<
+>persona< Yeah. I need it for homework. >endoftext<
+>personb< Want to borrow mine? >endoftext<
+>persona< Yes, thank you! >endoftext<
+
+
+
+>persona< It’s so quiet today. >endoftext<
+>personb< Yeah, it’s kind of nice though. >endoftext<
+>persona< I like quiet days. >endoftext<
+>personb< Me too. They feel calm. >endoftext<
+
+
+
+>persona< I don’t want to go outside today. >endoftext<
+>personb< Why not? It’s a nice day. >endoftext<
+>persona< I know, but I just feel tired. >endoftext<
+>personb< Did you get enough sleep? >endoftext<
+>persona< Not really. I stayed up too late. >endoftext<
+>personb< What were you doing? >endoftext<
+>persona< Watching videos. I kept saying "just one more." >endoftext<
+>personb< Classic. I do that too. >endoftext<
+>persona< Now I don’t want to do anything. >endoftext<
+>personb< Maybe just take a nap, then go outside later. >endoftext<
+>persona< That sounds like a good plan. >endoftext<
+
+
+
+>persona< I need to get some food. >endoftext<
+>personb< What do you want to eat? >endoftext<
+>persona< I don’t know. Something easy. >endoftext<
+>personb< Do you have anything at home? >endoftext<
+>persona< I have bread, eggs, and cheese. >endoftext<
+>personb< That sounds like a sandwich to me. >endoftext<
+>persona< Yeah. I can make a sandwich. >endoftext<
+>personb< Do you want help? >endoftext<
+>persona< I think I’ve got it. Thanks though. >endoftext<
+>personb< Sandwiches are always a good idea. >endoftext<
+
+
+
+>persona< What do you do when you feel sad? >endoftext<
+>personb< I try to go for a walk. It helps. >endoftext<
+>persona< I don’t feel like walking when I’m sad. >endoftext<
+>personb< Sometimes I don’t either. But I try. >endoftext<
+>persona< What else can I do? >endoftext<
+>personb< Talk to someone. Listen to music. >endoftext<
+>persona< I think I just want to be alone right now. >endoftext<
+>personb< That’s okay too. Just don’t stay alone too long. >endoftext<
+>persona< Thanks. You always say the right thing. >endoftext<
+>personb< I’m here for you. Always. >endoftext<
+
+
+
+>persona< I have to go to the store. >endoftext<
+>personb< What do you need to get? >endoftext<
+>persona< I need milk, bread, and fruit. >endoftext<
+>personb< Can you get juice too? >endoftext<
+>persona< What kind of juice? >endoftext<
+>personb< Apple juice, if they have it. >endoftext<
+>persona< Okay, I’ll look. Do you need anything else? >endoftext<
+>personb< Maybe snacks. I like those little cookies. >endoftext<
+>persona< Got it. I’ll be back in an hour. >endoftext<
+>personb< Thanks! You're the best. >endoftext<
+
+
+
+>persona< Do you like to read books? >endoftext<
+>personb< Yes, I love books. >endoftext<
+>persona< What kind of books do you read? >endoftext<
+>personb< I read books about people and stories. >endoftext<
+>persona< Like novels? >endoftext<
+>personb< Yes, I like books with good characters. >endoftext<
+>persona< I want to read more. I don’t read much. >endoftext<
+>personb< Start with short books. Easy books are good too. >endoftext<
+>persona< That’s a good idea. >endoftext<
+>personb< Books are fun when you find the right one. >endoftext<
+
+
+
+>persona< What do you do every morning? >endoftext<
+>personb< I get up, eat food, and go to work. >endoftext<
+>persona< What do you eat in the morning? >endoftext<
+>personb< I eat toast and drink water. Sometimes tea. >endoftext<
+>persona< I drink coffee every day. >endoftext<
+>personb< Coffee is too strong for me. >endoftext<
+>persona< I like the way it smells. >endoftext<
+>personb< I do too. I just don’t drink it. >endoftext<
+>persona< Maybe one day you will. >endoftext<
+>personb< Maybe. But not today. >endoftext<
+
+
+
+>persona< Why do you always walk so fast? >endoftext<
+>personb< I don’t know, I just do. >endoftext<
+>persona< I have to run to keep up. >endoftext<
+>personb< Sorry! I don’t mean to walk fast. >endoftext<
+>persona< It’s okay. I just think it’s funny. >endoftext<
+>personb< Do you want me to slow down? >endoftext<
+>persona< No, I’ll walk faster. It’s good for me. >endoftext<
+>personb< Alright. We can walk fast together. >endoftext<
+
+
+
+>persona< I like music a lot. >endoftext<
+>personb< Me too. I listen to music every day. >endoftext<
+>persona< What kind of music do you like? >endoftext<
+>personb< I like songs with words. >endoftext<
+>persona< Do you sing along? >endoftext<
+>personb< Yes! I sing even if I’m bad at it. >endoftext<
+>persona< That’s the best way to enjoy music. >endoftext<
+>personb< Do you play music too? >endoftext<
+>persona< No, but I want to learn. >endoftext<
+>personb< You should! It’s fun. >endoftext<

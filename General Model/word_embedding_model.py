@@ -78,10 +78,10 @@ def load_data(filename, context_window):
 
 
 def main():
-    context_window = 7
+    context_window = 5
     embedding_dimension = 50
 
-    word_data, labels, vocab = load_data("embedding_data_test.txt", context_window)
+    word_data, labels, vocab = load_data("embedding_data.txt", context_window)
     vocab_size = len(vocab)
 
     print(f"Amount of data: {len(labels)}")
@@ -89,26 +89,26 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print()
 
-    embedding_model = model.Model.load("Models/new_embedding_test")
-    # embedding_model = model.Model(
-    #     model_functions.cross_entropy,
-    #     (context_window - 1, vocab_size),
-    #     layers.Embedding(embedding_dimension, model_functions.linear),
-    #     layers.Dense(vocab_size, model_functions.softmax)
-    # )
+    # embedding_model = model.Model.load("Models/embedding_test_king")
+    embedding_model = model.Model(
+        model_functions.cross_entropy,
+        (context_window - 1, vocab_size),
+        layers.Embedding(embedding_dimension, model_functions.linear),
+        layers.Dense(vocab_size, model_functions.softmax)
+    )
 
-    embedding_weights = embedding_model.layers[0].weights
+    # embedding_weights = embedding_model.layers[0].weights
+    #
+    # word_to_index = {word: i for i, word in enumerate(vocab)}
+    #
+    # word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
+    #
+    # print(most_similar("cat", word_vectors))
+    # print(analogy("kitten", "puppy", "cat", word_vectors, 10))
 
-    word_to_index = {word: i for i, word in enumerate(vocab)}
-
-    word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
-
-    print(most_similar("cat", word_vectors))
-    print(analogy("kitten", "puppy", "cat", word_vectors, 10))
-
-    # embedding_model.fit(word_data, labels, 10, 0.003, 1)
-    # #
-    # embedding_model.save("Models/new_embedding_test")
+    embedding_model.fit(word_data, labels, 10, 0.01, 1)
+    #
+    embedding_model.save("Models/embedding_test_king")
 
 
 if __name__ == "__main__":

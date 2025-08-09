@@ -5,6 +5,8 @@ import pygame
 import model
 import chess_board
 import numpy as np
+import model_functions
+import layers
 
 def get_ohe_board(board):
     new_board = np.zeros((8, 8, 7))
@@ -28,7 +30,15 @@ def main():
     pygame.init()
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
 
-    chess_model = model.Model.load("Models/model_2_chess_conv_n_2")
+    chess_model = model.Model(
+        model_functions.cross_entropy,
+        (7, 8, 8),
+        layers.Convolution(64, (3, 3), model_functions.relu),
+        layers.Convolution(128, (3, 3), model_functions.relu),
+        layers.Dense(256, model_functions.relu),
+        layers.Dense(128, model_functions.relu),
+        layers.Dense(4096, model_functions.softmax)
+    )
 
     tile_size = 80
 
@@ -62,6 +72,7 @@ def main():
     rewards = []
     last_bot_move = None
     last_bot_position = None
+    train = False
     while True:
         mouse_pos = pygame.mouse.get_pos()
 
@@ -77,7 +88,7 @@ def main():
                     pygame.draw.rect(screen, color, (x * tile_size, y * tile_size, tile_size, tile_size))
                 is_square_light = not is_square_light
 
-                # Draw pieces there
+                # Draw pieces ther
                 piece = board.board[y, x]
                 if piece != 0:
                     if is_black_turn:
@@ -96,7 +107,7 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 print("Saved")
-                # chess_model.save("Models/")
+                chess_model.save("Models/testing_stuff")
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -124,6 +135,10 @@ def main():
                         board.make_move(selected_square, square_pos)
                         is_black_turn = not is_black_turn
                         legal_moves = board.get_legal_moves(is_black_turn)
+
+                        if board.game_ended:
+                            train = True
+                            break
 
                         if is_black_turn:
                             temp_board_ohe = get_ohe_board(board.board)
@@ -157,14 +172,18 @@ def main():
                         is_black_turn = not is_black_turn
                         legal_moves = board.get_legal_moves(is_black_turn)
 
+                        if board.game_ended:
+                            train = True
+                            break
+
                 if piece != 0:
                     selected_square = square_pos
                     selected_piece_legal_moves = board.get_legal_moves_piece(square_pos)
                 else:
                     selected_square = None
 
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_t:
+            elif event.type == pygame.KEYDOWN or train:
+                if train or event.key == pygame.K_t:
                     last_positions.append(positions)
                     last_moves.append(moves)
                     if len(last_positions) > num_games_train_on:
@@ -175,9 +194,7 @@ def main():
                     for positions_i, moves_i in zip(last_positions, last_moves):
                         train_positions += positions_i
                         train_moves += moves_i
-                    print(train_positions[0])
-                    print()
-                    print(train_positions[1])
+                    train = False
                     chess_model.fit(np.array(train_positions), np.array(train_moves), 1, 0.01)
                     positions = []
                     moves = []

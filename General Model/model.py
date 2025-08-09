@@ -77,8 +77,8 @@ class Model:
                 if j % batch_size == 0 and j != 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate)
-                # if j % 500 == 0 and j != 0:
-                #     print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
+                if j % 500 == 0 and j != 0:
+                    print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
                 #     print(f"Total convolution time: {layers.total_convolution_time:.6f}")
                 #     print(f"Total dc da time: {layers.dc_da_time}")
                 #     print(f"Total dz da time: {layers.dz_da_time}")

@@ -1,7 +1,5 @@
 import chess_board
-import model
-import model_functions
-import layers
+from scratch_model import model
 import random
 import numpy as np
 

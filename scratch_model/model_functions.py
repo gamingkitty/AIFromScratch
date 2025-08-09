@@ -13,6 +13,7 @@ class Activation:
     def derivative(self, x):
         return self.derivative(x)
 
+
 class Loss:
     def __init__(self, function, derivative):
         self.function = function
@@ -46,6 +47,8 @@ def f_softmax(x):
     return e_x / e_x.sum()
 
 
+# Jacobian like [[z_0 -> a_0, z_1 -> a_0],
+#                [z_0 -> a_1, z_1 -> a_1]]
 def softmax_derivative(x):
     softmax_vals = softmax(x)
 

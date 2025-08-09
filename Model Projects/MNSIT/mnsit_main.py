@@ -1,7 +1,7 @@
+import time
+
 import numpy as np
-import model
-import layers
-import model_functions
+from scratch_model import model
 from keras.datasets import mnist
 
 
@@ -20,22 +20,22 @@ def load_data():
 
 
 def main():
-    save_as = "Models/test_large_dense"
+    save_as = "Models/full_conv"
 
     train_images, train_labels, test_images, test_labels = load_data()
 
     ohe_train_labels = np.eye(10)[train_labels]
     ohe_test_labels = np.eye(10)[test_labels]
 
-    # ai_model = model.Model.load(save_as)
-    ai_model = model.Model(
-        model_functions.cross_entropy,
-        (28, 28),
-        layers.Dense(2048, model_functions.relu),
-        # layers.Dense(10, model_functions.relu),
-        # layers.Dropout(0.5),
-        layers.Dense(10, model_functions.softmax)
-    )
+    ai_model = model.Model.load(save_as)
+    # ai_model = model.Model(
+    #     model_functions.cross_entropy,
+    #     (28, 28),
+    #     layers.Dense(128, model_functions.relu),
+    #     layers.Dense(64, model_functions.relu),
+    #     # layers.Dropout(0.5),
+    #     layers.Dense(10, model_functions.softmax)
+    # )
     # ai_model = model.Model(
     #     model_functions.cross_entropy,
     #     (1, 28, 28),
@@ -46,7 +46,7 @@ def main():
     #     # layers.MaxPooling((2, 2), 2),
     #     layers.Dense(128, model_functions.relu),
     #     layers.Dense(64, model_functions.relu),
-    #     layers.Dropout(0.5),
+    #     # layers.Dropout(0.5),
     #
     #     layers.Dense(10, model_functions.softmax)
     # )
@@ -55,7 +55,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 5, 0.01, 32)
+    ai_model.fit(train_images, ohe_train_labels, 1, 0.01, 32)
 
     print()
     accuracy = ai_model.test(test_images, ohe_test_labels)
@@ -68,4 +68,30 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    # arr2 = np.array([[[1, 2], [3, 4]], [[1, 2], [3, 4]]])
+    # arr = np.array([1, 2])
+    # arr2 = np.array([3, 4])
+    # print(np.sum(arr2 * arr, axis=2))
+    # arr1 = np.array([[[1, 2],
+    #                   [3, 4]],
+    #                  [[1, 2],
+    #                   [3, 4]]])
+    #
+    # arr2 = np.array([[1, 2],
+    #                  [3, 4]])
+    # print(np.tensordot(arr2, arr1, axes=[0, 1]))
+    # print(np.tensordot(arr1, arr2, axes=[2, 0]))
+
+    # neuron_num = 3
+    # input_num = 4
+    # inp = np.array([1, 2, 3, 4])
+    # da_dw_input = np.zeros((input_num, neuron_num, neuron_num))
+    # diag_indices = np.arange(neuron_num)
+    # da_dw_input[np.arange(input_num)[:, None], diag_indices, diag_indices] += inp[:, None]
+    # print(da_dw_input)
+
+    arr1 = np.array([[0, 1], [1, 0]])
+    arr2 = np.array([[1, 2],
+                     [3, 4]])
+    print(arr2[arr1])

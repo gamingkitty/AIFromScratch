@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/test_conv")
+    ai_model = model.Model.load("Models/dense_network")
 
     image = np.zeros((28, 28))
 
@@ -191,7 +191,7 @@ def main():
             image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
             image_2 = image_2.reshape((28, 28)).T
 
-            image_2 = 0.4 - image_2
+            image_2 = 0.3 - image_2
             image_2 = np.maximum(image_2, 0)
             image += image_2 * 0.25
 

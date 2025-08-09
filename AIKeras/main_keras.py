@@ -1,7 +1,19 @@
 import numpy as np
 import keras
 from keras import layers
-from keras.datasets import mnist
+from keras.datasets import mnist, cifar10
+
+
+def load_cifar10():
+    (train_images, train_labels), (test_images, test_labels) = cifar10.load_data()
+
+    train_images = train_images / 255
+    test_images = test_images / 255
+
+    # train_images = np.transpose(train_images, (0, 3, 1, 2))
+    # test_images = np.transpose(test_images, (0, 3, 1, 2))
+
+    return train_images, train_labels.flatten(), test_images, test_labels.flatten()
 
 
 def load_data():
@@ -19,7 +31,7 @@ def load_data():
 
 
 def main():
-    train_images, train_labels, test_images, test_labels = load_data()
+    train_images, train_labels, test_images, test_labels = load_data()  # load_cifar10()
 
     ohe_train_labels = np.zeros((len(train_labels), 10))
     ohe_test_labels = np.zeros((len(test_labels), 10))
@@ -32,23 +44,24 @@ def main():
 
     model = keras.Sequential(
         [layers.Input((28, 28, 1)),
-         layers.Conv2D(32, (3, 3), activation='relu'),
-         layers.MaxPooling2D((2, 2)),
-
-         layers.Conv2D(64, (3, 3), activation='relu'),
-         layers.MaxPooling2D((2, 2)),
-
+         # layers.Conv2D(32, (3, 3), activation='relu'),
+         # layers.MaxPooling2D((2, 2)),
+         #
+         # layers.Conv2D(64, (3, 3), activation='relu'),
+         # # layers.MaxPooling2D((2, 2)),
+         #
          layers.Flatten(),
 
+         layers.Dense(512, activation='relu'),
+         layers.Dense(256, activation='relu'),
          layers.Dense(128, activation='relu'),
-         layers.Dense(64, activation='relu'),
 
          layers.Dense(10, activation='softmax')]
     )
 
     model.compile(optimizer='adam', loss='categorical_crossentropy')
 
-    model.fit(train_images, ohe_train_labels, batch_size=32, epochs=10)
+    model.fit(train_images, ohe_train_labels, batch_size=32, epochs=7)
 
     num_correct = 0
     predictions = model.predict(test_images)

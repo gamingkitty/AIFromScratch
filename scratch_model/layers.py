@@ -2,7 +2,7 @@ import math
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import time
-import model_functions
+from scratch_model import model_functions
 
 
 total_convolution_time = 0
@@ -51,8 +51,8 @@ class Dense:
     def __init__(self, neuron_num, activation_function):
         self.neuron_num = neuron_num
         self.activation_function = activation_function
-        self.weights = np.array([])
-        self.gradient = np.array([])
+        self.weights = None
+        self.gradient = None
 
     def init_weights(self, previous_layer_output_shape):
         in_num = np.prod(previous_layer_output_shape)
@@ -87,6 +87,9 @@ class Dense:
 
     def get_output_shape(self):
         return self.neuron_num, 1
+
+    def count_params(self):
+        return np.prod(self.weights.shape)
 
 
 class Convolution:
@@ -161,6 +164,7 @@ class Convolution:
         this_layer_z = this_layer_z.reshape((self.kernel_num, self.output_num))
         prev_layer_a = prev_layer_a.reshape(self.input_shape)
 
+        # Is the same for every kernel, so we don't need to calculate for every kernel.
         dz_dw = get_windows(self.kernel_shape, prev_layer_a).reshape(-1, self.output_num)
 
         activation_derivative = self.activation_function.derivative(this_layer_z)
@@ -192,6 +196,7 @@ class Convolution:
 
     def update_weights(self, learning_rate):
         global dz_da_time
+        # Divide by output num because to get the gradient you have to sum over the affects of each weight on every output in a specific channel.
         self.kernels -= learning_rate * self.gradient.reshape((self.kernel_num, *self.channel_kernel_shape)) / self.output_num
         self.biases -= learning_rate * self.bias_gradient / self.output_num
         self.bias_gradient = np.zeros(self.kernel_num)
@@ -211,6 +216,9 @@ class Convolution:
 
     def get_output_shape(self):
         return self.true_output_shape
+
+    def count_params(self):
+        return np.prod(self.kernels.shape) + np.prod(self.biases.shape)
 
 
 # Very slow currently
@@ -286,57 +294,20 @@ class MaxPooling:
     def get_output_shape(self):
         return self.output_shape
 
-
-class Dense:
-    def __init__(self, neuron_num, activation_function):
-        self.neuron_num = neuron_num
-        self.activation_function = activation_function
-        self.weights = np.array([])
-        self.gradient = np.array([])
-
-    def init_weights(self, previous_layer_output_shape):
-        in_num = np.prod(previous_layer_output_shape)
-        out_num = self.neuron_num
-        weight_limit = math.sqrt(6 / (in_num + out_num))
-        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num + 1, out_num))
-        self.gradient = np.zeros_like(self.weights)
-
-    def predict(self, prev_layer_activation):
-        return self.activation_function(np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights))
-
-    def forward_pass(self, prev_layer_activation):
-        z_data = np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights)
-        a_data = self.activation_function(z_data)
-
-        return z_data, a_data
-
-    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        prev_layer_a = np.append(prev_layer_a.flatten(), 1)
-        if self.activation_function.is_elementwise:
-            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
-        else:
-            dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
-        self.gradient += dc_dz * prev_layer_a[:, np.newaxis]
-        # Exclude bias neuron from prev layer because it is not an output of that layer.
-        dc_da = np.dot(dc_dz, self.weights[:-1].T)
-        return dc_da
-
-    def update_weights(self, learning_rate):
-        self.weights -= learning_rate * self.gradient
-        self.gradient = np.zeros_like(self.weights)
-
-    def get_output_shape(self):
-        return self.neuron_num, 1
+    def count_params(self):
+        return 0
 
 
 # Assumes input is something one hot encoded.
 class Embedding:
-    def __init__(self, embedding_dimension, activation_function, input_shape=None):
+    def __init__(self, embedding_dimension, vocab_size, activation_function, input_shape=None):
         self.neuron_num = embedding_dimension
+        self.vocab_size = vocab_size
         self.input_shape = input_shape
         self.activation_function = activation_function
         self.weights = np.array([])
         self.gradient = np.array([])
+        self.output_shape = None
 
     def init_weights(self, previous_layer_output_shape):
         if self.input_shape is None:
@@ -344,8 +315,10 @@ class Embedding:
         in_num = np.prod(self.input_shape)
         out_num = self.neuron_num
         weight_limit = math.sqrt(6 / (in_num + out_num))
-        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.input_shape[1], self.neuron_num))
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.vocab_size, self.neuron_num))
         self.gradient = np.zeros_like(self.weights)
+
+        self.output_shape = (*self.input_shape, self.neuron_num)
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -353,20 +326,21 @@ class Embedding:
 
     def forward_pass(self, prev_layer_activation):
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
-        z_data = np.sum(self.weights[np.argmax(prev_layer_activation, axis=1)], axis=0)
+        z_data = self.weights[prev_layer_activation]
         a_data = self.activation_function(z_data)
 
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        dc_da = dc_da.reshape(self.output_shape)
         if self.activation_function.is_elementwise:
             dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
         else:
             dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
 
-        # Old gradient code that didn't assume ohe.
-        # self.gradient += dc_dz * np.sum(prev_layer_a.reshape(self.input_shape), axis=0)[:, np.newaxis]
-        self.gradient[np.argmax(prev_layer_a.reshape(self.input_shape), axis=1)] += dc_dz
+        # self.gradient[prev_layer_a.reshape(self.input_shape)] += dc_dz
+        np.add.at(self.gradient, prev_layer_a.flatten(), dc_dz.reshape(-1, self.neuron_num))
+        # self.gradient[prev_layer_a] += dc_dz
 
         dc_da = np.dot(dc_dz, self.weights.T)
         return dc_da
@@ -376,7 +350,10 @@ class Embedding:
         self.gradient = np.zeros_like(self.weights)
 
     def get_output_shape(self):
-        return self.neuron_num, 1
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.weights.shape)
 
 
 # Change so that doesnt store self.dz_da
@@ -408,3 +385,138 @@ class Dropout:
 
     def get_output_shape(self):
         return self.input_shape
+
+    def count_params(self):
+        return 0
+
+
+# Currently returns entire sequence. Might add option in future to only return final output of layer.
+class Recurrent:
+    def __init__(self, neuron_num, activation_function, input_shape=None):
+        self.neuron_num = neuron_num
+        self.activation_function = activation_function
+
+        self.hidden_weights = None
+        self.hidden_gradient = None
+        self.input_weights = None
+        self.input_gradient = None
+
+        # Input shape will be something like (-1, n) because size can vary based on number of tokens passed in
+        self.input_shape = input_shape
+        self.output_shape = None
+
+        self.this_layer_a = None
+
+    def init_weights(self, previous_layer_output_shape):
+        if self.input_shape is None:
+            self.input_shape = previous_layer_output_shape
+
+        self.output_shape = (self.input_shape[0], self.neuron_num)
+
+        in_num = np.prod(previous_layer_output_shape[1:])
+        out_num = self.neuron_num
+        weight_limit = math.sqrt(6 / (in_num + out_num))
+
+        self.hidden_weights = np.random.uniform(-weight_limit, weight_limit, size=(out_num, out_num))
+        self.hidden_gradient = np.zeros_like(self.hidden_weights)
+        self.input_weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num))
+        self.input_gradient = np.zeros_like(self.input_weights)
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        before_activation = np.dot(prev_layer_activation[0].flatten(), self.input_weights)
+        last_output = self.activation_function(before_activation)
+
+        z_states = [before_activation]
+        a_states = [last_output]
+
+        for token in prev_layer_activation[1:]:
+            before_activation = np.dot(last_output, self.hidden_weights) + np.dot(token.flatten(), self.input_weights)
+            z_states.append(before_activation)
+            last_output = self.activation_function(before_activation)
+            a_states.append(last_output)
+
+        self.this_layer_a = np.array(a_states)
+        return np.array(z_states), self.this_layer_a
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        # Because outputs full sequence, needs to be based on time
+        dc_da = dc_da.reshape(self.output_shape)
+        this_layer_z.reshape(self.output_shape)
+        prev_layer_a.reshape(self.input_shape)
+        da_dw_hidden = np.zeros((self.neuron_num, self.neuron_num, self.neuron_num))
+        dc_dw_hidden_sum = np.zeros((self.neuron_num, self.neuron_num))
+
+        # Initialize dc_dw_input_sum and da_dw_input for t = 0 which isn't covered by the loop
+        da_dw_input = np.zeros((self.input_shape[1], self.neuron_num, self.neuron_num))
+        diag_indices = np.arange(self.neuron_num)
+        da_dw_input[np.arange(self.input_shape[1])[:, None], diag_indices, diag_indices] = prev_layer_a[0][:, None]
+        activation_derivative = self.activation_function.derivative(this_layer_z[0])
+        if self.activation_function.is_elementwise:
+            da_dw_input *= activation_derivative
+        else:
+            da_dw_input = np.tensordot(da_dw_input, activation_derivative.T, axes=[2, 0])
+        dc_dw_input_sum = np.sum(da_dw_input * dc_da[0], axis=2)
+
+        # Initialize da_din
+        da_din = self.input_weights
+        if self.activation_function.is_elementwise:
+            da_din *= activation_derivative
+        else:
+            da_din = np.dot(da_din, activation_derivative.T)
+        new_dc_da = [np.dot(dc_da[0].flatten(), da_din.T)]
+
+        for t in range(1, len(this_layer_z)):
+            # Calculate da_dw_hidden and dc_dw_hidden_sum
+            da_dz = self.activation_function.derivative(this_layer_z[t])
+            dz_dw_hidden = np.sum(da_dw_hidden[:, :, np.newaxis, :] * self.hidden_weights.T, axis=2)
+            for i in range(dz_dw_hidden.shape[0]):
+                dz_dw_hidden[i, :, i] += self.this_layer_a[t - 1]
+            if self.activation_function.is_elementwise:
+                da_dw_hidden = da_dz * dz_dw_hidden
+            else:
+                da_dw_hidden = np.tensordot(dz_dw_hidden, da_dz.T, axes=[2, 0])
+
+            dc_dw_hidden = np.dot(dc_da[t], np.transpose(da_dw_hidden, (0, 2, 1)))
+            dc_dw_hidden_sum += dc_dw_hidden
+
+            # Calculate da_dw_input
+            dz_dw_input = np.tensordot(da_dw_input, self.hidden_weights, axes=[2, 0])
+            diag_indices = np.arange(self.neuron_num)
+            dz_dw_input[np.arange(self.input_shape[1])[:, None], diag_indices, diag_indices] += prev_layer_a[t][:, None]
+            if self.activation_function.is_elementwise:
+                da_dw_input = da_dz * dz_dw_input
+            else:
+                da_dw_hidden = np.tensordot(dz_dw_input, da_dz.T, axes=[2, 0])
+            # Test possibly
+            dc_dw_input_sum += np.sum(da_dw_input * dc_da[t], axis=2)
+
+            # Calculate dc_da
+            dz_da = self.input_weights + np.dot(da_din, self.hidden_weights)
+            if self.activation_function.is_elementwise:
+                da_din = dz_da * activation_derivative
+            else:
+                da_din = np.dot(dz_da, activation_derivative.T)
+
+            new_dc_da.append(np.dot(dc_da[t].flatten(), da_din.T))
+
+        self.hidden_gradient += dc_dw_hidden_sum
+        self.input_gradient += dc_dw_input_sum
+
+        return np.array(new_dc_da).flatten()
+
+    def update_weights(self, learning_rate):
+        self.input_weights -= learning_rate * self.input_gradient
+        self.hidden_weights -= learning_rate * self.hidden_gradient
+
+        self.hidden_gradient = np.zeros_like(self.hidden_weights)
+        self.input_gradient = np.zeros_like(self.input_weights)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.input_weights.shape) + np.prod(self.hidden_weights.shape)

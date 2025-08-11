@@ -41,10 +41,10 @@ def load_data(filename, context):
 
 
 def main():
-    embedding_dimension = 64
-    context = 15
+    embedding_dimension = 20
+    context = 10
     learning_rate = 0.015
-    epochs = 10
+    epochs = 5
 
     data, labels, vocab = load_data("Training Data/Conversations/conversations.txt", context)
     vocab_size = len(vocab)
@@ -53,17 +53,17 @@ def main():
     print(f"Data length: {len(data)}")
     print(f"Vocab size: {vocab_size}")
 
-    ai_model = model.Model(
-        model_functions.cross_entropy,
-        (context,),
-        layers.Embedding(embedding_dimension, vocab_size, model_functions.linear),
-        # layers.Recurrent(32, model_functions.relu),
-        layers.Dense(256, model_functions.relu),
-        layers.Dense(vocab_size, model_functions.softmax)
-    )
-    print(f"Param num: {ai_model.get_param_num()}")
+    # ai_model = model.Model(
+    #     model_functions.cross_entropy,
+    #     (context,),
+    #     layers.Embedding(embedding_dimension, vocab_size, model_functions.linear),
+    #     layers.Recurrent(32, model_functions.relu),
+    #     layers.Dense(64, model_functions.relu),
+    #     layers.Dense(vocab_size, model_functions.softmax)
+    # )
+    # print(f"Param num: {ai_model.get_param_num()}")
 
-    # ai_model = model.Model.load("Models/embedding_conversation")
+    ai_model = model.Model.load("Models/first_recurrent")
 
     initial_accuracy = ai_model.test(data, labels)
     print(f"Initial accuracy: {initial_accuracy * 100:.4}%")
@@ -73,7 +73,7 @@ def main():
     final_accuracy = ai_model.test(data, labels)
     print(f"Final accuracy: {final_accuracy * 100:.4}%")
 
-    ai_model.save("Models/embedding_conversation")
+    ai_model.save("Models/first_recurrent")
 
 
 if __name__ == "__main__":

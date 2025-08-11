@@ -443,10 +443,36 @@ class Recurrent:
         return np.array(z_states), self.this_layer_a
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # Because outputs full sequence, needs to be based on time
         dc_da = dc_da.reshape(self.output_shape)
-        this_layer_z.reshape(self.output_shape)
-        prev_layer_a.reshape(self.input_shape)
+        this_layer_z = this_layer_z.reshape(self.output_shape)
+        prev_layer_a = prev_layer_a.reshape(self.input_shape)
+
+        activation_derivatives = [self.activation_function.derivative(z) for z in this_layer_z]
+
+        # Calculate new dc_da
+        # Go backwards through time to determine dc_dh at every timestep (not just dc_da because h affects later hs too)
+        # then use dc_dh to find dc_da
+        dc_dh = dc_da[-1]
+        dc_dh_list = [dc_dh]
+        da_dz = activation_derivatives[-1]
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_dh * da_dz
+        else:
+            dc_dz = np.dot(dc_dh, da_dz)
+        new_dc_da = [np.dot(dc_dz, self.input_weights.T)]
+        for t in reversed(range(len(this_layer_z) - 1)):
+            dc_dh = np.dot(dc_dz, self.hidden_weights.T) + dc_da[t]
+            da_dz = activation_derivatives[t]
+            if self.activation_function.is_elementwise:
+                dc_dz = dc_dh * da_dz
+            else:
+                dc_dz = np.dot(dc_dh, da_dz)
+            dc_dh_list.append(dc_dh)
+            new_dc_da.append(np.dot(dc_dz, self.input_weights.T))
+
+        new_dc_da = np.array(new_dc_da[::-1]).flatten()
+        dc_dh_list = np.array(dc_dh_list[::-1])
+
         da_dw_hidden = np.zeros((self.neuron_num, self.neuron_num, self.neuron_num))
         dc_dw_hidden_sum = np.zeros((self.neuron_num, self.neuron_num))
 
@@ -454,34 +480,24 @@ class Recurrent:
         da_dw_input = np.zeros((self.input_shape[1], self.neuron_num, self.neuron_num))
         diag_indices = np.arange(self.neuron_num)
         da_dw_input[np.arange(self.input_shape[1])[:, None], diag_indices, diag_indices] = prev_layer_a[0][:, None]
-        activation_derivative = self.activation_function.derivative(this_layer_z[0])
         if self.activation_function.is_elementwise:
-            da_dw_input *= activation_derivative
+            da_dw_input *= activation_derivatives[0]
         else:
-            da_dw_input = np.tensordot(da_dw_input, activation_derivative.T, axes=[2, 0])
-        dc_dw_input_sum = np.sum(da_dw_input * dc_da[0], axis=2)
-
-        # Initialize da_din
-        da_din = self.input_weights
-        if self.activation_function.is_elementwise:
-            da_din *= activation_derivative
-        else:
-            da_din = np.dot(da_din, activation_derivative.T)
-        new_dc_da = [np.dot(dc_da[0].flatten(), da_din.T)]
+            da_dw_input = np.tensordot(da_dw_input, activation_derivatives[0].T, axes=[2, 0])
+        dc_dw_input_sum = np.sum(da_dw_input * dc_dh_list[0], axis=2)
 
         for t in range(1, len(this_layer_z)):
             # Calculate da_dw_hidden and dc_dw_hidden_sum
-            da_dz = self.activation_function.derivative(this_layer_z[t])
-            dz_dw_hidden = np.sum(da_dw_hidden[:, :, np.newaxis, :] * self.hidden_weights.T, axis=2)
-            for i in range(dz_dw_hidden.shape[0]):
-                dz_dw_hidden[i, :, i] += self.this_layer_a[t - 1]
+            da_dz = activation_derivatives[t]
+            dz_dw_hidden = np.tensordot(da_dw_hidden, self.hidden_weights, axes=[2, 0])
+            diag_indices = np.arange(self.neuron_num)
+            dz_dw_hidden[diag_indices[:, None], diag_indices, diag_indices] += self.this_layer_a[t - 1][:, None]
             if self.activation_function.is_elementwise:
                 da_dw_hidden = da_dz * dz_dw_hidden
             else:
                 da_dw_hidden = np.tensordot(dz_dw_hidden, da_dz.T, axes=[2, 0])
 
-            dc_dw_hidden = np.dot(dc_da[t], np.transpose(da_dw_hidden, (0, 2, 1)))
-            dc_dw_hidden_sum += dc_dw_hidden
+            dc_dw_hidden_sum += np.sum(da_dw_hidden * dc_dh_list[t], axis=2)
 
             # Calculate da_dw_input
             dz_dw_input = np.tensordot(da_dw_input, self.hidden_weights, axes=[2, 0])
@@ -490,23 +506,14 @@ class Recurrent:
             if self.activation_function.is_elementwise:
                 da_dw_input = da_dz * dz_dw_input
             else:
-                da_dw_hidden = np.tensordot(dz_dw_input, da_dz.T, axes=[2, 0])
-            # Test possibly
-            dc_dw_input_sum += np.sum(da_dw_input * dc_da[t], axis=2)
+                da_dw_input = np.tensordot(dz_dw_input, da_dz.T, axes=[2, 0])
 
-            # Calculate dc_da
-            dz_da = self.input_weights + np.dot(da_din, self.hidden_weights)
-            if self.activation_function.is_elementwise:
-                da_din = dz_da * activation_derivative
-            else:
-                da_din = np.dot(dz_da, activation_derivative.T)
-
-            new_dc_da.append(np.dot(dc_da[t].flatten(), da_din.T))
+            dc_dw_input_sum += np.sum(da_dw_input * dc_dh_list[t], axis=2)
 
         self.hidden_gradient += dc_dw_hidden_sum
         self.input_gradient += dc_dw_input_sum
 
-        return np.array(new_dc_da).flatten()
+        return new_dc_da
 
     def update_weights(self, learning_rate):
         self.input_weights -= learning_rate * self.input_gradient

@@ -39,7 +39,7 @@ def load_data(filename, context):
 
 
 def main():
-    context = 10
+    context = 15
 
     data, labels, vocab = load_data("Training Data/Conversations/conversations.txt", context)
     vocab_size = len(vocab)
@@ -47,7 +47,7 @@ def main():
     index_to_word = {i: word for i, word in enumerate(vocab)}
     known_tokens = word_to_index.keys()
 
-    language_model = model.Model.load("Models/first_recurrent")
+    language_model = model.Model.load("Models/language_recurrent")
 
     print(f"Model param num: {language_model.get_param_num()}")
 

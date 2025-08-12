@@ -462,12 +462,12 @@ class Recurrent:
         new_dc_da = [np.dot(dc_dz, self.input_weights.T)]
         for t in reversed(range(len(this_layer_z) - 1)):
             dc_dh = np.dot(dc_dz, self.hidden_weights.T) + dc_da[t]
+            dc_dh_list.append(dc_dh)
             da_dz = activation_derivatives[t]
             if self.activation_function.is_elementwise:
                 dc_dz = dc_dh * da_dz
             else:
                 dc_dz = np.dot(dc_dh, da_dz)
-            dc_dh_list.append(dc_dh)
             new_dc_da.append(np.dot(dc_dz, self.input_weights.T))
 
         new_dc_da = np.array(new_dc_da[::-1]).flatten()
@@ -516,11 +516,11 @@ class Recurrent:
         return new_dc_da
 
     def update_weights(self, learning_rate):
-        self.input_weights -= learning_rate * self.input_gradient
-        self.hidden_weights -= learning_rate * self.hidden_gradient
+        self.input_weights -= learning_rate * self.input_gradient / self.input_shape[0]
+        self.hidden_weights -= learning_rate * self.hidden_gradient / self.input_shape[0]
 
-        self.hidden_gradient = np.zeros_like(self.hidden_weights)
         self.input_gradient = np.zeros_like(self.input_weights)
+        self.hidden_gradient = np.zeros_like(self.hidden_weights)
 
     def get_output_shape(self):
         return self.output_shape

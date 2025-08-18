@@ -38,6 +38,14 @@ def load_data(filename, context):
     return np.array(data), np.array(labels), vocab
 
 
+def accuracy(prediction, label):
+    num_correct = 0
+    for i in range(len(prediction)):
+        num_correct += np.argmax(prediction[i]) == np.argmax(label[i])
+
+    return num_correct / len(prediction)
+
+
 def main():
     context = 15
 
@@ -47,7 +55,7 @@ def main():
     index_to_word = {i: word for i, word in enumerate(vocab)}
     known_tokens = word_to_index.keys()
 
-    language_model = model.Model.load("Models/language_recurrent")
+    language_model = model.Model.load("Models/large_recurrent")
 
     print(f"Model param num: {language_model.get_param_num()}")
 
@@ -74,7 +82,8 @@ def main():
         num = 0
         while num < 30:
             # Currently just do max rather than probability distribution
-            next_token = int(np.argmax(language_model.predict(np.array(chat_history))))
+            prediction = language_model.predict(np.array(chat_history))
+            next_token = int(np.argmax(prediction[-1]))
 
             token_string = index_to_word[next_token]
             if token_string == ">endoftext<":

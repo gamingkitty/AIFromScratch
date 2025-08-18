@@ -30,14 +30,23 @@ def load_data(filename, context):
     data = []
     labels = []
 
-    for i in range(context, len(tokens)):
+    for i in range(context, len(tokens), context):
         prev_words = []
         for j in range(context):
             prev_words.insert(0, token_to_index[tokens[i - j - 1]])
         data.append(prev_words)
-        labels.append(np.eye(vocab_size)[token_to_index[tokens[i]]])
+        label_arr = prev_words[1:] + [token_to_index[tokens[i]]]
+        labels.append(np.array([np.eye(vocab_size)[token] for token in label_arr]))
 
     return np.array(data), np.array(labels), vocab
+
+
+def accuracy(prediction, label):
+    num_correct = 0
+    for i in range(len(prediction)):
+        num_correct += np.argmax(prediction[i]) == np.argmax(label[i])
+
+    return num_correct / len(prediction)
 
 
 def main():
@@ -61,9 +70,23 @@ def main():
     #     layers.Dense(128, model_functions.relu),
     #     layers.Dense(vocab_size, model_functions.softmax)
     # )
+    # ai_model = model.Model(
+    #     model_functions.cross_entropy,
+    #     (context,),
+    #     [
+    #         layers.Embedding(embedding_dimension, vocab_size, model_functions.linear),
+    #         layers.Recurrent(128, model_functions.relu),
+    #         layers.Recurrent(128, model_functions.relu),
+    #         layers.Loop(
+    #             layers.Dense(256, model_functions.relu),
+    #             layers.Dense(vocab_size, model_functions.softmax)
+    #         )
+    #     ],
+    #     accuracy_function=accuracy
+    # )
     # print(f"Param num: {ai_model.get_param_num()}")
 
-    ai_model = model.Model.load("Models/language_recurrent")
+    ai_model = model.Model.load("Models/large_recurrent")
 
     initial_accuracy = ai_model.test(data, labels)
     print(f"Initial accuracy: {initial_accuracy * 100:.4}%")
@@ -73,7 +96,7 @@ def main():
     final_accuracy = ai_model.test(data, labels)
     print(f"Final accuracy: {final_accuracy * 100:.4}%")
 
-    ai_model.save("Models/language_recurrent")
+    ai_model.save("Models/large_recurrent")
 
 
 if __name__ == "__main__":

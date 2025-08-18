@@ -4,8 +4,11 @@ from scratch_model import model_functions
 import pickle
 
 
+def default_accuracy(prediction, label):
+    return np.argmax(prediction) == np.argmax(label)
+
 class Model:
-    def __init__(self, loss_function, input_shape, *model_layers):
+    def __init__(self, loss_function, input_shape, model_layers, accuracy_function=default_accuracy):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
@@ -22,6 +25,8 @@ class Model:
 
         self.output_shape = prev_output_shape
         self.output_num = np.prod(prev_output_shape)
+
+        self.accuracy_function = accuracy_function
 
     def predict(self, input_data):
         prediction = input_data
@@ -71,15 +76,17 @@ class Model:
             for j in range(data_size):
                 z_data, a_data = self.forward_propagate(data[j])
                 total_loss += self.loss(a_data[-1], labels[j])
-                total_correct += np.argmax(a_data[-1]) == np.argmax(labels[j])
+                total_correct += self.accuracy_function(a_data[-1], labels[j])
                 self.backwards_propagate(z_data, a_data, labels[j], reward_mults[j])
 
                 if (j + 1) % batch_size == 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate / batch_size)
-                # if (j + 1) % 500 == 0 and console_updates:
+                # if (j + 1) % 50 == 0 and console_updates:
                 #     print(f"So far there is loss of {(total_loss / j):.6f} and {(100 * (total_correct / j)):.4f}% accuracy.")
                 #     print(f"Total correct: {total_correct}")
+                #     print(f"Recurrent time: {layers.recurrent_time}")
+                #     print(f"Loop time: {layers.loop_time}")
                     # print(f"Total convolution time: {layers.total_convolution_time:.6f}")
                     # print(f"Total dc da time: {layers.dc_da_time}")
                     # print(f"Total dz da time: {layers.dz_da_time}")
@@ -98,8 +105,7 @@ class Model:
         total_correct = 0
         for i in range(len(data)):
             prediction = self.predict(data[i])
-            if np.argmax(prediction) == np.argmax(labels[i]):
-                total_correct += 1
+            total_correct += self.accuracy_function(prediction, labels[i])
         return total_correct / len(data)
 
     def get_param_num(self):

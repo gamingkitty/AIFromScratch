@@ -12,6 +12,9 @@ dz_da_time = 0
 
 times = 0
 
+recurrent_time = 0
+loop_time = 0
+
 
 # def get_windows(window_shape, matrix):
 #     win_h, win_w = window_shape
@@ -443,6 +446,8 @@ class Recurrent:
         return np.array(z_states), self.this_layer_a
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        global recurrent_time
+        start_time = time.perf_counter()
         dc_da = dc_da.reshape(self.output_shape)
         this_layer_z = this_layer_z.reshape(self.output_shape)
         prev_layer_a = prev_layer_a.reshape(self.input_shape)
@@ -510,14 +515,17 @@ class Recurrent:
 
             dc_dw_input_sum += np.sum(da_dw_input * dc_dh_list[t], axis=2)
 
-        self.hidden_gradient += dc_dw_hidden_sum
-        self.input_gradient += dc_dw_input_sum
+        # Divide by number of time steps to reduce spikes in gradient
+        self.hidden_gradient += dc_dw_hidden_sum / len(this_layer_z)
+        self.input_gradient += dc_dw_input_sum / len(this_layer_z)
+
+        recurrent_time += time.perf_counter() - start_time
 
         return new_dc_da
 
     def update_weights(self, learning_rate):
-        self.input_weights -= learning_rate * self.input_gradient / self.input_shape[0]
-        self.hidden_weights -= learning_rate * self.hidden_gradient / self.input_shape[0]
+        self.input_weights -= learning_rate * self.input_gradient
+        self.hidden_weights -= learning_rate * self.hidden_gradient
 
         self.input_gradient = np.zeros_like(self.input_weights)
         self.hidden_gradient = np.zeros_like(self.hidden_weights)
@@ -527,3 +535,101 @@ class Recurrent:
 
     def count_params(self):
         return np.prod(self.input_weights.shape) + np.prod(self.hidden_weights.shape)
+
+class Loop:
+    def __init__(self, *layers):
+        self.layers = layers
+        self.output_shape = None
+        self.z_data = None
+        self.a_data = None
+
+    def init_weights(self, previous_layer_output_shape):
+        loop_num = previous_layer_output_shape[0]
+        previous_layer_output_shape = previous_layer_output_shape[1:]
+        for layer in self.layers:
+            layer.init_weights(previous_layer_output_shape)
+            previous_layer_output_shape = layer.get_output_shape()
+        self.output_shape = (loop_num, *self.layers[-1].get_output_shape())
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        z_data = []
+        a_data = []
+        self.z_data = []
+        self.a_data = []
+        for activation in prev_layer_activation:
+            z_data_current = None
+            a_data_current = None
+            last_value = activation
+            self.z_data.append([])
+            self.a_data.append([activation])
+            for i in range(len(self.layers)):
+                z_data_current, a_data_current = self.layers[i].forward_pass(last_value)
+                last_value = a_data_current
+                self.z_data[-1].append(z_data_current)
+                self.a_data[-1].append(a_data_current)
+
+            z_data.append(z_data_current)
+            a_data.append(a_data_current)
+
+        return np.array(z_data), np.array(a_data)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        global loop_time
+        start_time = time.perf_counter()
+        dc_da = dc_da.reshape(self.output_shape)
+        new_dc_da_list = []
+        for i in range(len(prev_layer_a)):
+            new_dc_da = dc_da[i].flatten()
+            for j in reversed(range(len(self.layers))):
+                layer = self.layers[j]
+                new_dc_da = layer.backwards_pass(self.a_data[i][j], self.z_data[i][j], new_dc_da)
+            new_dc_da_list.append(new_dc_da)
+
+        loop_time += time.perf_counter() - start_time
+
+        return np.array(new_dc_da_list).flatten()
+
+    def update_weights(self, learning_rate):
+        for layer in self.layers:
+            layer.update_weights(learning_rate)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        param_num = 0
+        for layer in self.layers:
+            param_num += layer.count_params()
+        return param_num
+
+
+# class Stack:
+#     def __init__(self, stack_size):
+#         self.stack_size = stack_size
+#         self.output_shape = None
+#
+#     def init_weights(self, prev_layer_activation_shape):
+#         # Currently only supports 2d inputs
+#         self.output_shape = (prev_layer_activation_shape[0], self.stack_size, *prev_layer_activation_shape[1:])
+#
+#     def predict(self, prev_layer_activation):
+#         z_data, a_data = self.forward_pass(prev_layer_activation)
+#         return a_data
+#
+#     def forward_pass(self, prev_layer_activation):
+#         chunks = []
+#         for i in range(len(prev_layer_activation)):
+#             chunk = np.zeros(self.output_shape[1:])
+#             count = 0
+#             for j in reversed(range(i + 1)):
+#                 chunk[j] = prev_layer_activation[j]
+#                 count += 1
+#                 if count >= self.stack_size:
+#                     break
+#             chunks.append(chunk)
+#         chunks = np.array(chunks)
+#         return chunks, chunks

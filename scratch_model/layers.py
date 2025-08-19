@@ -1,8 +1,8 @@
 import math
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
+from numpy.lib.stride_tricks import sliding_window_view
 import time
-from scratch_model import model_functions
 
 
 total_convolution_time = 0
@@ -536,6 +536,7 @@ class Recurrent:
     def count_params(self):
         return np.prod(self.input_weights.shape) + np.prod(self.hidden_weights.shape)
 
+
 class Loop:
     def __init__(self, *layers):
         self.layers = layers
@@ -607,29 +608,34 @@ class Loop:
         return param_num
 
 
-# class Stack:
-#     def __init__(self, stack_size):
-#         self.stack_size = stack_size
-#         self.output_shape = None
-#
-#     def init_weights(self, prev_layer_activation_shape):
-#         # Currently only supports 2d inputs
-#         self.output_shape = (prev_layer_activation_shape[0], self.stack_size, *prev_layer_activation_shape[1:])
-#
-#     def predict(self, prev_layer_activation):
-#         z_data, a_data = self.forward_pass(prev_layer_activation)
-#         return a_data
-#
-#     def forward_pass(self, prev_layer_activation):
-#         chunks = []
-#         for i in range(len(prev_layer_activation)):
-#             chunk = np.zeros(self.output_shape[1:])
-#             count = 0
-#             for j in reversed(range(i + 1)):
-#                 chunk[j] = prev_layer_activation[j]
-#                 count += 1
-#                 if count >= self.stack_size:
-#                     break
-#             chunks.append(chunk)
-#         chunks = np.array(chunks)
-#         return chunks, chunks
+class Stack:
+    def __init__(self, stack_size):
+        self.stack_size = stack_size
+        self.output_shape = None
+
+    def init_weights(self, prev_layer_activation_shape):
+        self.output_shape = (prev_layer_activation_shape[0], self.stack_size, *prev_layer_activation_shape[1:])
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        padded = np.pad(prev_layer_activation, ((self.stack_size - 1, 0),) + ((0, 0),) * (prev_layer_activation.ndim - 1))
+        stacked = np.moveaxis(sliding_window_view(padded, window_shape=self.stack_size, axis=0), -1, 1)
+        return stacked, stacked
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        dc_da = dc_da.reshape(self.output_shape)
+        new_dc_da = np.array([np.sum(np.fliplr(dc_da).diagonal(offset).T, axis=0).T
+                              for offset in range(-dc_da.shape[0] + 1, dc_da.shape[1] - self.stack_size + 1)][::-1])
+        return new_dc_da
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0

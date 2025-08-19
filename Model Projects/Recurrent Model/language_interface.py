@@ -8,34 +8,40 @@ def tokenize(text):
     return [token.lower() for token in tokens]
 
 
-def load_data(filename, context):
+def load_data(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         text = file.read()
 
-    # Tokenize while keeping punctuation as separate tokens
     tokens = tokenize(text)
 
-    # Get unique vocabulary
     all_tokens = set(tokens)
+    all_tokens.remove(">newconversation<")
     vocab = sorted(all_tokens)
     vocab_size = len(vocab)
 
-    # Mapping words to indices
     token_to_index = {token: i for i, token in enumerate(vocab)}
-
-    # mapped_words = [word_to_index[word] for word in tokens]
 
     data = []
     labels = []
 
-    for i in range(context, len(tokens)):
-        prev_words = []
-        for j in range(context):
-            prev_words.insert(0, token_to_index[tokens[i - j - 1]])
-        data.append(prev_words)
-        labels.append(np.eye(vocab_size)[token_to_index[tokens[i]]])
+    prev_words = []
+    for token in tokens:
+        if token == ">newconversation<":
+            data.append(np.array(prev_words[:-1]))
+            labels.append(np.array([np.eye(vocab_size)[token] for token in prev_words[1:]]))
+            prev_words = []
+        else:
+            prev_words.append(token_to_index[token])
 
-    return np.array(data), np.array(labels), vocab
+    # for i in range(context, len(tokens), context):
+    #     prev_words = []
+    #     for j in range(context):
+    #         prev_words.insert(0, token_to_index[tokens[i - j - 1]])
+    #     data.append(prev_words)
+    #     label_arr = prev_words[1:] + [token_to_index[tokens[i]]]
+    #     labels.append(np.array([np.eye(vocab_size)[token] for token in label_arr]))
+
+    return data, labels, vocab
 
 
 def accuracy(prediction, label):
@@ -47,15 +53,17 @@ def accuracy(prediction, label):
 
 
 def main():
-    context = 15
+    context = 150
 
-    data, labels, vocab = load_data("Training Data/Conversations/conversations.txt", context)
+    print("Loading data...")
+    data, labels, vocab = load_data("Training Data/Conversations/conversations.txt")
+    print("Data loaded")
     vocab_size = len(vocab)
     word_to_index = {word: i for i, word in enumerate(vocab)}
     index_to_word = {i: word for i, word in enumerate(vocab)}
     known_tokens = word_to_index.keys()
 
-    language_model = model.Model.load("Models/large_recurrent")
+    language_model = model.Model.load("Models/conversation_recurrent")
 
     print(f"Model param num: {language_model.get_param_num()}")
 

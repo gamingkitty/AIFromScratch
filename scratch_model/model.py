@@ -1,11 +1,12 @@
 import numpy as np
-from scratch_model import layers
-from scratch_model import model_functions
 import pickle
+import random
+from scratch_model import layers
 
 
 def default_accuracy(prediction, label):
     return np.argmax(prediction) == np.argmax(label)
+
 
 class Model:
     def __init__(self, loss_function, input_shape, model_layers, accuracy_function=default_accuracy):
@@ -67,9 +68,9 @@ class Model:
 
         for i in range(epochs):
             if shuffle_data:
-                indices = np.arange(data_size)
-                np.random.shuffle(indices)
-                data, labels, reward_mults = data[indices], labels[indices], reward_mults[indices]
+                combined = list(zip(data, labels, reward_mults))
+                random.shuffle(combined)
+                data, labels, reward_mults = map(list, zip(*combined))
 
             total_loss = 0
             total_correct = 0
@@ -115,10 +116,12 @@ class Model:
         return param_num
 
     def save(self, filename):
-        with open(filename + ".pkl", "wb") as file:
+        path = filename if filename.endswith(".pkl") else filename + ".pkl"
+        with open(path, "wb") as file:
             pickle.dump(self, file)
 
     @classmethod
     def load(cls, filename):
-        with open(filename + ".pkl", "rb") as file:
+        path = filename if filename.endswith(".pkl") else filename + ".pkl"
+        with open(path, "rb") as file:
             return pickle.load(file)

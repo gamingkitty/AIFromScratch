@@ -71,14 +71,14 @@ def mse_loss_derivative(output, expected):
     return -(2 / output.shape[0]) * (expected - output)
 
 
-def categorical_entropy_loss(output, expected):
+def cross_entropy_loss(output, expected):
     output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
 
     loss = -np.sum(expected * np.log(output_clipped))
     return loss
 
 
-def categorical_entropy_loss_derivative(output, expected):
+def cross_entropy_loss_derivative(output, expected):
     output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
 
     gradient = -expected / output_clipped
@@ -93,4 +93,4 @@ linear = Activation(f_linear, f_linear)
 
 # Loss functions
 mse = Loss(mse_loss, mse_loss_derivative)
-cross_entropy = Loss(categorical_entropy_loss, categorical_entropy_loss_derivative)
+cross_entropy = Loss(cross_entropy_loss, cross_entropy_loss_derivative)

@@ -1,5 +1,5 @@
 import pygame
-import model
+from scratch_model import *
 import sys
 import numpy as np
 from keras.datasets import mnist

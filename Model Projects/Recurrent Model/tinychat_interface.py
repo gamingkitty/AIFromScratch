@@ -21,7 +21,6 @@ def accuracy(prediction, label):
     return num_correct / len(prediction)
 
 
-
 def sample_with_temperature(probs, temperature=1.0):
     probs = cp.asarray(probs, dtype=cp.float32)
     probs = probs / probs.sum()

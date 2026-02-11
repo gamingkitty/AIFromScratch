@@ -1,4 +1,4 @@
-from scratch_model import model
+from scratch_model import *
 import numpy as np
 import re
 

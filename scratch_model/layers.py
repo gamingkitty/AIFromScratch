@@ -67,16 +67,16 @@ class Dense:
         self.gradient = np.zeros_like(self.weights)
 
     def predict(self, prev_layer_activation):
-        return self.activation_function(np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights))
+        return self.activation_function(np.dot(np.append(prev_layer_activation, 1), self.weights))
 
     def forward_pass(self, prev_layer_activation):
-        z_data = np.dot(np.append(prev_layer_activation.flatten(), 1), self.weights)
+        z_data = np.dot(np.append(prev_layer_activation, 1), self.weights)
         a_data = self.activation_function(z_data)
 
         return z_data, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        prev_layer_a = np.append(prev_layer_a.flatten(), 1)
+        prev_layer_a = np.append(prev_layer_a, 1)
         if self.activation_function.is_elementwise:
             dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
         else:
@@ -387,6 +387,7 @@ class Dropout:
         mask = np.random.rand(*prev_layer_activation.shape) > self.dropout_percent
         self.dz_da = mask.astype(float)
         a_data = prev_layer_activation * self.dz_da
+
         return None, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
@@ -441,14 +442,14 @@ class Recurrent:
     def forward_pass(self, prev_layer_activation):
         global recurrent_time
         start_time = time.perf_counter()
-        before_activation = np.dot(prev_layer_activation[0].flatten(), self.input_weights)
+        before_activation = np.dot(prev_layer_activation[0], self.input_weights)
         last_output = self.activation_function(before_activation)
 
         z_states = [before_activation]
         a_states = [last_output]
 
         for token in prev_layer_activation[1:]:
-            before_activation = np.dot(last_output, self.hidden_weights) + np.dot(token.flatten(), self.input_weights)
+            before_activation = np.dot(last_output, self.hidden_weights) + np.dot(token, self.input_weights)
             z_states.append(before_activation)
             last_output = self.activation_function(before_activation)
             a_states.append(last_output)
@@ -460,9 +461,9 @@ class Recurrent:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         global recurrent_time
         start_time = time.perf_counter()
-        dc_da = dc_da.reshape(self.output_shape)
-        this_layer_z = this_layer_z.reshape(self.output_shape)
-        prev_layer_a = prev_layer_a.reshape(self.input_shape)
+        # dc_da = dc_da.reshape(self.output_shape)
+        # this_layer_z = this_layer_z.reshape(self.output_shape)
+        # prev_layer_a = prev_layer_a.reshape(self.input_shape)
 
         activation_derivatives = [self.activation_function.derivative(z) for z in this_layer_z]
 
@@ -487,7 +488,7 @@ class Recurrent:
                 dc_dz = np.dot(dc_dh, da_dz)
             new_dc_da.append(np.dot(dc_dz, self.input_weights.T))
 
-        new_dc_da = np.array(new_dc_da[::-1]).flatten()
+        new_dc_da = np.array(new_dc_da[::-1])
         dc_dh_list = np.array(dc_dh_list[::-1])
 
         da_dw_hidden = np.zeros((self.neuron_num, self.neuron_num, self.neuron_num))
@@ -598,7 +599,7 @@ class Loop:
         dc_da = dc_da.reshape(self.output_shape)
         new_dc_da_list = []
         for i in range(len(prev_layer_a)):
-            new_dc_da = dc_da[i].flatten()
+            new_dc_da = dc_da[i] # .flatten()
             for j in reversed(range(len(self.layers))):
                 layer = self.layers[j]
                 new_dc_da = layer.backwards_pass(self.a_data[i][j], self.z_data[i][j], new_dc_da)
@@ -606,7 +607,7 @@ class Loop:
 
         loop_time += time.perf_counter() - start_time
 
-        return np.array(new_dc_da_list).flatten()
+        return np.array(new_dc_da_list)
 
     def update_weights(self, learning_rate):
         for layer in self.layers:
@@ -661,8 +662,6 @@ class Stack:
         return 0
 
 
-# Not working
-# Always flattens input
 class LayerNorm:
     def __init__(self):
         self.epsilon = 1e-5
@@ -685,29 +684,26 @@ class LayerNorm:
         return a
 
     def forward_pass(self, prev_layer_activation):
-        prev_layer_activation = prev_layer_activation.flatten()
         dif_mean = (prev_layer_activation - prev_layer_activation.mean())
         epsilon_std = np.sqrt(prev_layer_activation.var() + self.epsilon)
+
         quotient = dif_mean / epsilon_std
+
         out = (self.weights * quotient) + self.biases
 
         return (epsilon_std, quotient, dif_mean), out
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        prev_layer_a = prev_layer_a.flatten()
         epsilon_std, quotient, dif_mean = this_layer_z
 
         self.weights_gradient += quotient * dc_da
         self.biases_gradient += dc_da
-        # make only normalize the last axis
 
-        # dc_dmean = np.sum(-self.weights * dc_da / epsilon_std)
-        # dc_dvar = np.sum(-(1/2) * self.weights * dif_mean * np.power(epsilon_std, -3) * dc_da)
-        #
-        # new_dc_da = (dif_mean * (2 / prev_layer_a.shape[-1]) * dc_dvar) + (dc_dmean / prev_lyer_a.shape[-1]) + ((self.weights / epsilon_std) * dc_da)
+        g = dc_da * self.weights
 
-        dvar_dx = (2 / len(prev_layer_a)) * dif_mean
-
+        # new_dc_da = ((g - (g.sum() / n)) / epsilon_std) - ((dif_mean * np.dot(dif_mean, g)) / (n * np.pow(epsilon_std, 3)))
+        # Equivalent but slightly faster version
+        new_dc_da = (g - g.mean() - quotient * (g * quotient).mean()) / epsilon_std
 
         return new_dc_da
 
@@ -715,8 +711,270 @@ class LayerNorm:
         self.weights -= learning_rate * self.weights_gradient
         self.biases -= learning_rate * self.biases_gradient
 
+        self.weights_gradient = np.zeros_like(self.weights)
+        self.biases_gradient = np.zeros_like(self.biases)
+
     def get_output_shape(self):
         return self.output_shape
 
     def count_params(self):
         return np.prod(self.weights.shape) + np.prod(self.biases.shape)
+
+
+class Attention:
+    def __init__(self, value_size, query_key_size, mask=None):
+        self.value_size = value_size
+        self.query_key_size = query_key_size
+
+        self.key_weights = None
+        self.query_weights = None
+        self.value_weights = None
+
+        self.key_gradient = None
+        self.query_gradient = None
+        self.value_gradient = None
+
+        self.output_shape = None
+
+        self.mask = mask
+
+    def init_weights(self, previous_layer_output_shape):
+        in_num = previous_layer_output_shape[1]
+
+        self.output_shape = (previous_layer_output_shape[0], self.value_size)
+
+        weight_limit_qk = math.sqrt(6 / (in_num + self.query_key_size))
+        weight_limit_v = math.sqrt(6 / (in_num + self.value_size))
+
+        self.key_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (previous_layer_output_shape[1], self.query_key_size))
+        self.query_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (previous_layer_output_shape[1], self.query_key_size))
+        self.value_weights = np.random.uniform(-weight_limit_v, weight_limit_v, (previous_layer_output_shape[1], self.value_size))
+
+        self.key_gradient = np.zeros_like(self.key_weights)
+        self.query_gradient = np.zeros_like(self.query_weights)
+        self.value_gradient = np.zeros_like(self.value_weights)
+
+    def predict(self, prev_layer_activation):
+        z, a = self.forward_pass(prev_layer_activation)
+        return a
+
+    def forward_pass(self, prev_layer_activation):
+        t = prev_layer_activation.shape[0]
+
+        # Shape (time, query/key/value size)
+        queries = np.tensordot(prev_layer_activation, self.query_weights, axes=[1, 0])
+        keys = np.tensordot(prev_layer_activation, self.key_weights, axes=[1, 0])
+        values = np.tensordot(prev_layer_activation, self.value_weights, axes=[1, 0])
+
+        # Dot key and query values to get the attention scores
+        # Shape (query, key), so each row contains the values of query_i dot all keys,
+        # or how much token_i attends to all other tokens
+        raw_attention_scores = np.tensordot(queries, keys, axes=[1, 1]) / np.sqrt(self.query_key_size)
+
+        if self.mask is not None:
+            mask = self.mask(t)
+            raw_attention_scores = np.where(mask, raw_attention_scores, -1e9)
+
+        # Softmax attention scores along key axis
+        e_xs = np.exp(raw_attention_scores - np.max(raw_attention_scores, axis=1, keepdims=True))
+
+        if self.mask is not None:
+            e_xs *= mask
+
+        attention_scores = e_xs / np.sum(e_xs, axis=1, keepdims=True)
+
+        # Multiply attention scores by corresponding values and sum
+        output = np.tensordot(attention_scores.T, values, axes=[1, 0])
+
+        return (queries, keys, values, attention_scores), output
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        queries, keys, values, attention_scores = this_layer_z
+        t = prev_layer_a.shape[0]
+
+        dc_dv = np.tensordot(attention_scores, dc_da, axes=[1, 0])
+        self.value_gradient += np.dot(prev_layer_a.T, dc_dv)
+
+        dc_dattention = np.dot(values, dc_da.T)
+
+        # Softmax derivative
+        n, m = attention_scores.shape
+        idx = np.arange(m)
+        diagonals = np.zeros((n, m, m), dtype=attention_scores.dtype)
+        diagonals[:, idx, idx] = attention_scores
+
+        dattention_draw = diagonals - (attention_scores[:, :, np.newaxis] * attention_scores[:, np.newaxis, :])
+
+        # Compute dc_draw
+        dc_draw = np.sum((dc_dattention[:, :, np.newaxis] * dattention_draw), axis=1)
+
+        if self.mask is not None:
+            dc_draw *= self.mask(t)
+
+        # Works because dr_dq/dc_dk for all queries/keys is the same, just (keys/queries) / sqrt(n)
+        dc_dquery = np.dot(dc_draw, keys / np.sqrt(self.query_key_size))
+        dc_dkey = np.dot(dc_draw.T, queries / np.sqrt(self.query_key_size))
+
+        self.query_gradient += np.dot(prev_layer_a.T, dc_dquery)
+        self.key_gradient += np.dot(prev_layer_a.T, dc_dkey)
+
+        new_dc_da = np.tensordot(dc_dv, self.value_weights.T, axes=[1, 0]) + np.tensordot(dc_dquery, self.query_weights.T, axes=[1, 0]) + np.tensordot(dc_dkey, self.key_weights.T, axes=[1, 0])
+        return new_dc_da
+
+    def update_weights(self, learning_rate):
+        self.value_weights -= learning_rate * self.value_gradient
+        self.query_weights -= learning_rate * self.query_gradient
+        self.key_weights -= learning_rate * self.key_gradient
+
+        self.value_gradient = np.zeros_like(self.value_weights)
+        self.query_gradient = np.zeros_like(self.query_weights)
+        self.key_gradient = np.zeros_like(self.key_weights)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.value_weights.shape) + np.prod(self.query_weights.shape) + np.prod(self.key_weights.shape)
+
+
+# Must take in vectorized activation function
+class TimeDistributedDense:
+    def __init__(self, neuron_num, activation_function):
+        self.neuron_num = neuron_num
+        self.activation_function = activation_function
+        self.weights = None
+        self.gradient = None
+        self.biases = None
+        self.bias_gradient = None
+
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape):
+        self.output_shape = (previous_layer_output_shape[0], self.neuron_num)
+
+        previous_layer_output_shape = previous_layer_output_shape[1:]
+        in_num = np.prod(previous_layer_output_shape)
+        out_num = self.neuron_num
+        weight_limit = math.sqrt(6 / (in_num + out_num))
+
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num))
+        self.gradient = np.zeros_like(self.weights)
+
+        self.biases = np.zeros(out_num)
+        self.bias_gradient = np.zeros_like(self.biases)
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        z_data = np.dot(prev_layer_activation, self.weights) + self.biases
+        a_data = self.activation_function(z_data)
+
+        return z_data, a_data
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        if self.activation_function.is_elementwise:
+            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+        else:
+            dc_dz = np.einsum('ij,ijk->ik', dc_da, self.activation_function.derivative(this_layer_z))
+        self.gradient += np.dot(prev_layer_a.T, dc_dz)
+        self.bias_gradient += np.sum(dc_dz, axis=0)
+
+        dc_da = np.dot(dc_dz, self.weights.T)
+        return dc_da
+
+    def update_weights(self, learning_rate):
+        self.weights -= learning_rate * self.gradient
+        self.biases -= learning_rate * self.bias_gradient
+
+        self.gradient = np.zeros_like(self.weights)
+        self.bias_gradient = np.zeros_like(self.biases)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.weights.shape) + np.prod(self.biases.shape)
+
+
+class Sum:
+    def __init__(self):
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape):
+        self.output_shape = previous_layer_output_shape[1:]
+
+    def predict(self, prev_layer_activation):
+        return np.sum(prev_layer_activation, axis=0)
+
+    def forward_pass(self, prev_layer_activation):
+        return None, np.sum(prev_layer_activation, axis=0)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return np.tile(dc_da, (len(prev_layer_a), 1))
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+
+
+class Flatten:
+    def __init__(self):
+        self.input_shape = None
+        self.output_size = None
+
+    def init_weights(self, previous_layer_output_shape):
+        self.input_shape = previous_layer_output_shape
+        self.output_size = np.prod(self.input_shape)
+
+    def predict(self, prev_layer_activation):
+        return prev_layer_activation.flatten()
+
+    def forward_pass(self, prev_layer_activation):
+        return None, prev_layer_activation.flatten()
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return np.reshape(dc_da, self.input_shape)
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.output_size,
+
+    def count_params(self):
+        return 0
+
+
+class Reshape:
+    def __init__(self, shape):
+        self.input_shape = None
+        self.output_shape = shape
+
+    def init_weights(self, previous_layer_output_shape):
+        self.input_shape = previous_layer_output_shape
+
+    def predict(self, prev_layer_activation):
+        return np.reshape(prev_layer_activation, self.output_shape)
+
+    def forward_pass(self, prev_layer_activation):
+        return None, np.reshape(prev_layer_activation, self.output_shape)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return np.reshape(dc_da, self.input_shape)
+
+    def update_weights(self, learning_rate):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+

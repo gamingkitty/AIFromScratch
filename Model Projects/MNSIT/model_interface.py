@@ -1,5 +1,5 @@
 import pygame
-import model
+from scratch_model import *
 import sys
 import numpy as np
 from keras.datasets import mnist
@@ -31,7 +31,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("Models/dense_network")
+    ai_model = model.Model.load("C:\Users\brier\PycharmProjects\AIFromScratch\General Model\Models\convolution_fast.pkl")
 
     image = np.zeros((28, 28))
 

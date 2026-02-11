@@ -1,7 +1,7 @@
 from datasets import load_dataset
 import re
 import numpy as np
-import cupy as cp
+# import cupy as cp
 import os
 from collections import Counter
 
@@ -155,7 +155,7 @@ def main():
     # ai_model = Model(
     #     model_functions.cross_entropy,
     #     (-1,),
-    #     [9
+    #     [
     #         layers.Embedding(128, vocab_size, model_functions.linear),
     #         layers.Recurrent(128, model_functions.relu),
     #         layers.Stack(20),
@@ -177,23 +177,25 @@ def main():
     #     ],
     #     accuracy_function=accuracy
     # )
-    # ai_model = Model(
-    #     model_functions.cross_entropy,
-    #     (-1,),
-    #     [
-    #         layers.Embedding(256, vocab_size, model_functions.linear),
-    #         # layers.Recurrent(128, model_functions.relu),
-    #         # layers.Recurrent(128, model_functions.relu),
-    #         layers.Stack(30),
-    #         layers.Loop(
-    #             layers.Dense(512, model_functions.relu),
-    #             layers.Dense(256, model_functions.relu),
-    #             layers.Dense(vocab_size, model_functions.softmax)
-    #         )
-    #     ],
-    #     accuracy_function=accuracy
-    # )
-    ai_model = Model.load("Models/tinychat_recurrent_18000")
+    ai_model = Model(
+        model_functions.cross_entropy,
+        (-1,),
+        [
+            layers.Embedding(256, vocab_size, model_functions.linear),
+            # layers.Attention(512, 512),
+            # layers.Attention(256, 256),
+            layers.Recurrent(128, model_functions.relu),
+            # layers.Recurrent(128, model_functions.relu),
+            layers.Stack(30),
+            layers.Loop(
+                layers.Dense(512, model_functions.relu),
+                layers.Dense(256, model_functions.relu),
+                layers.Dense(vocab_size, model_functions.softmax)
+            )
+        ],
+        accuracy_function=accuracy
+    )
+    # ai_model = Model.load("Models/tinychat_recurrent_18000")
     print(f"Param num: {ai_model.get_param_num()}")
 
     # ai_model = Model.load("Models/normal_recurrent")
@@ -202,10 +204,10 @@ def main():
     # print(f"Initial accuracy: {initial_accuracy * 100:.4}%")
 
     train_size = 500
-    start = 18000
+    start = 0
     while start < len(data):
         end = min(start + train_size, len(data))
-        ai_model.fit([cp.array(data[i]) for i in range(start, end)], [cp.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
+        ai_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
         print(f"Finished training on conversations {start} to {end}")
         start += train_size
         ai_model.save(f"Models/tinychat_recurrent_{end}")
@@ -213,7 +215,7 @@ def main():
     final_accuracy = ai_model.test(data, labels)
     print(f"Final accuracy: {final_accuracy * 100:.4}%")
 
-    ai_model.save("Models/tinychatl_recurrent")
+    ai_model.save("Models/tinychat_recurrent")
 
 
 # tiny_data, tiny_labels, tiny_vocab = load_tinychat()

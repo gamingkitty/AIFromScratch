@@ -52,7 +52,7 @@ class Model:
 
         return z_data, a_data
 
-    def backwards_propagate(self, z_data, a_data, expected_output, reward_mult):
+    def backwards_propagate(self, z_data, a_data, expected_output, reward_mult=1):
         dc_da = self.loss.derivative(a_data[-1], expected_output) * reward_mult
         for i in reversed(range(len(self.layers))):
             dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], dc_da)
@@ -85,11 +85,11 @@ class Model:
                         layer.update_weights(learning_rate / batch_size)
                 if (j + 1) % 10 == 0 and console_updates:
                     print(f"So far there is loss of {(total_loss / (j + 1)):.6f} and {(100 * (total_correct / (j + 1))):.4f}% accuracy.")
-                    print(f"Total correct: {total_correct}")
-                    print(f"Recurrent time: {layers.recurrent_time}")
+                    # print(f"Total correct: {total_correct}")
+                    # print(f"Recurrent time: {layers.recurrent_time}")
                     print(f"Loop time: {layers.loop_time}")
-                    print(f"Stack time: {layers.stack_time}")
-                    print(f"Embedding time: {layers.embedding_time}")
+                    # print(f"Stack time: {layers.stack_time}")
+                    # print(f"Embedding time: {layers.embedding_time}")
                     # print(f"Total convolution time: {layers.total_convolution_time:.6f}")
                     # print(f"Total dc da time: {layers.dc_da_time}")
                     # print(f"Total dz da time: {layers.dz_da_time}")

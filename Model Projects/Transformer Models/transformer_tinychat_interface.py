@@ -1,5 +1,5 @@
 import numpy as np
-import cupy as cp
+# import cupy as cp
 import re
 
 
@@ -8,7 +8,7 @@ def tokenize(text):
     return re.findall(pattern, text.lower())
 
 
-def load_vocab(cache_path: str = "tinychat_topk_indices.npz"):
+def load_vocab(cache_path: str = "tinychat_topk_indices_2500.npz"):
     cache = np.load(cache_path, allow_pickle=True)
     return list(cache["vocab"])
 
@@ -22,19 +22,19 @@ def accuracy(prediction, label):
 
 
 def sample_with_temperature(probs, temperature=1.0):
-    probs = cp.asarray(probs, dtype=cp.float32)
+    probs = np.asarray(probs, dtype=np.float32)
     probs = probs / probs.sum()
 
     if temperature <= 0:
-        return int(cp.argmax(probs).item())
+        return int(np.argmax(probs).item())
 
     # apply temperature
-    scaled = cp.log(probs + 1e-12) / temperature
-    exp_scaled = cp.exp(scaled - cp.max(scaled))
+    scaled = np.log(probs + 1e-12) / temperature
+    exp_scaled = np.exp(scaled - np.max(scaled))
     new_probs = exp_scaled / exp_scaled.sum()
 
     # cupy requires `size`
-    idx = cp.random.choice(len(probs), size=1, p=new_probs)
+    idx = np.random.choice(len(probs), size=1, p=new_probs)
     return int(idx.item())
 
 
@@ -48,7 +48,7 @@ def main():
 
     print(word_to_index)
 
-    language_model = model.Model.load("Models/tinychat_recurrent_22500")
+    language_model = model.Model.load("Models/tinychat_v1_30000")
 
     print(f"Model param num: {language_model.get_param_num()}")
 
@@ -69,11 +69,11 @@ def main():
 
         ai_response = []
         num = 0
-        while num < 30:
+        while num < 80:
             # Currently just do max rather than probability distribution
             prediction = language_model.predict(np.array(chat_history))[-1]
             # Can't be <unk> so [1:] and +1
-            next_token = sample_with_temperature(prediction[1:], temperature=0.9) + 1
+            next_token = sample_with_temperature(prediction[1:], temperature=0.3) + 1
 
             token_string = index_to_word[next_token]
             if token_string == "[/inst]":

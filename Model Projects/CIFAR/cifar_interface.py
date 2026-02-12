@@ -1,5 +1,5 @@
 import pygame
-from scratch_model import model
+from scratch_model import *
 import sys
 import numpy as np
 from keras.datasets import cifar10
@@ -29,12 +29,14 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = model.Model.load("../Model Projects/Models/cifar_dense")
+    ai_model = Model.load("C:\\Users\\brier\\PycharmProjects\\AIFromScratchFinal\\Model Projects\\Models\\cifar_conv_4.pkl")
 
     image = np.zeros((3, 32, 32))
 
     train_images, train_labels, test_images, test_labels = load_cifar10()
     current_image = 0
+
+    print(ai_model.test(test_images, test_labels))
 
     pygame.init()
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])

@@ -4,26 +4,26 @@ import numpy as np
 class Activation:
     def __init__(self, function, derivative, is_elementwise=True):
         self.function = function
-        self.derivative = derivative
+        self.derivative_fn = derivative
         self.is_elementwise = is_elementwise
 
     def __call__(self, x):
         return self.function(x)
 
     def derivative(self, x):
-        return self.derivative(x)
+        return self.derivative_fn(x)
 
 
 class Loss:
     def __init__(self, function, derivative):
         self.function = function
-        self.derivative = derivative
+        self.derivative_fn = derivative
 
     def __call__(self, output, expected):
         return self.function(output, expected)
 
     def derivative(self, output, expected):
-        return self.derivative(output, expected)
+        return self.derivative_fn(output, expected)
 
 
 def f_relu(x):
@@ -104,16 +104,22 @@ def cross_entropy_loss_derivative(output, expected):
     return gradient
 
 
+def softmax_cross_entropy_derivative(output, expected):
+    return (output - expected) / output.shape[0]
+
+
 # Activation functions
 relu = Activation(f_relu, relu_derivative)
 tanh = Activation(f_tanh, tanh_derivative)
 softmax = Activation(f_softmax, softmax_derivative, False)
 vectorized_softmax = Activation(softmax_vectorized, softmax_vectorized_derivative, False)
 linear = Activation(f_linear, f_derivative)
+vectorized_cross_softmax = Activation(softmax_vectorized, f_derivative)
 
 # Loss functions
 mse = Loss(mse_loss, mse_loss_derivative)
 cross_entropy = Loss(cross_entropy_loss, cross_entropy_loss_derivative)
+softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_derivative)
 
 
 def causal_mask(t):

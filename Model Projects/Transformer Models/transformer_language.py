@@ -83,8 +83,8 @@ def accuracy(prediction, label):
 
 
 def main():
-    epochs = 3
-    learning_rate = 0.007
+    epochs = 10
+    learning_rate = 0.005
 
     data, labels, vocab = load_data("Training Data/conversations.txt")
 
@@ -99,58 +99,58 @@ def main():
     print(f"Vocab Size: {vocab_size}")
     print(f"Data Size: {len(data)}")
 
-    language_model = Model(
-        model_functions.cross_entropy,
-        (-1,),
-        [
-            layers.Embedding(embedding_dimension, vocab_size + 1, model_functions.linear),
-
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
-            ),
-
-            layers.TimeDistributedDense(attention_dimension, model_functions.relu),
-
-            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_softmax),
-            # layers.Loop(
-            #     layers.Dense(vocab_size, model_functions.softmax)
-            # )
-        ],
-        accuracy_function=accuracy,
-    )
-    # language_model = Model.load("Models/test_causal")
+    # language_model = Model(
+    #     model_functions.cross_entropy,
+    #     (-1,),
+    #     [
+    #         layers.Embedding(embedding_dimension, vocab_size + 1, model_functions.linear),
+    #
+    #         layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #         layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+    #         layers.TimeDistributedDense(attention_dimension, model_functions.linear),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #
+    #         layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #         layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+    #         layers.TimeDistributedDense(attention_dimension, model_functions.linear),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #
+    #         layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #         layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+    #         layers.TimeDistributedDense(attention_dimension, model_functions.linear),
+    #         layers.Loop(
+    #             layers.Dropout(dropout_percent),
+    #             layers.LayerNorm(),
+    #         ),
+    #
+    #         layers.TimeDistributedDense(attention_dimension, model_functions.relu),
+    #
+    #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_softmax),
+    #         #layers.Loop(
+    #         #    layers.Dense(vocab_size, model_functions.softmax)
+    #         #)
+    #     ],
+    #     accuracy_function=accuracy,
+    # )
+    language_model = Model.load("Models/test_distributed")
 
     print(f"Param num: {language_model.get_param_num()}")
 

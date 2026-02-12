@@ -19,76 +19,78 @@ def load_data(filename):
     vocab = sorted(all_tokens)
     vocab_size = len(vocab)
 
-    token_to_index = {token: i + 1 for i, token in enumerate(vocab)}
-    token_to_index[">null<"] = 0
+    token_to_index = {token: i for i, token in enumerate(vocab)}
 
     data = []
     labels = []
 
-    prev_15_words = [0 for _ in range(15)]
+    prev_words = []
     for token in tokens:
         if token == ">newconversation<":
-            prev_15_words = [0 for _ in range(15)]
+            data.append(np.array(prev_words[:-1]))
+            labels.append(np.array([np.eye(vocab_size)[token] for token in prev_words[1:]]))
+            prev_words = []
         else:
-            token_index = token_to_index[token]
-            if len(prev_15_words) == 15:
-                data.append(np.array(prev_15_words))
+            prev_words.append(token_to_index[token])
 
-                label = np.zeros(vocab_size)
-                label[token_index - 1] = 1
-                labels.append(label)
+    return data, labels, vocab
 
-            prev_15_words.append(token_index)
 
-            if len(prev_15_words) > 15:
-                prev_15_words.pop(0)
+def accuracy(prediction, label):
+    num_correct = 0
+    for i in range(len(prediction)):
+        num_correct += np.argmax(prediction[i]) == np.argmax(label[i])
 
-    return data, labels, vocab, token_to_index
+    return num_correct / len(prediction)
 
 
 def main():
-    data, labels, vocab, token_to_index = load_data("Training Data/conversations.txt")
+    data, labels, vocab = load_data("Training Data/conversations.txt")
 
     vocab_size = len(vocab)
 
     index_to_token = {i: token for i, token in enumerate(vocab)}
+    token_to_index = {token: i for i, token in enumerate(vocab)}
 
-    print(token_to_index)
+    language_model = Model.load("Models/test_distributed")
 
-    token_num = 15
+    index = 2
 
-    language_model = Model.load("Models/test_causal")
+    print([index_to_token[d] for d in data[1]])
+    prediction = language_model.predict(data[index])
+    predicted_tokens = [index_to_token[np.argmax(pred)] for pred in prediction]
+    label_tokens = [index_to_token[np.argmax(l)] for l in labels[index]]
 
-    previous_tokens = [0 for _ in range(token_num)]
+    print()
+    print(predicted_tokens)
+    print(label_tokens)
 
-    while True:
-        user_input = ">persona< " + input("> ") + " >endoftext<\n>personb<"
-        tokens = tokenize(user_input)
+    accuracy = sum(predicted_tokens[i] == label_tokens[i] for i in range(len(label_tokens))) / len(label_tokens)
+    print(f"Accuracy: {accuracy}")
 
-        print(tokens)
+    previous_tokens = []
 
-        for token in tokens:
-            previous_tokens.append(token_to_index[token])
-            previous_tokens.pop(0)
-
-        print([index_to_token[token - 1] for token in previous_tokens if token != 0])
-
-        language_model_token = np.argmax(language_model.predict(np.array(previous_tokens))) + 1
-        previous_tokens.append(language_model_token)
-        previous_tokens.pop(0)
-
-        language_model_text = ""
-
-        while language_model_token != token_to_index[">endoftext<"]:
-            language_model_text += index_to_token[language_model_token - 1] + " "
-            language_model_token = np.argmax(language_model.predict(np.array(previous_tokens))) + 1
-            previous_tokens.append(language_model_token)
-            previous_tokens.pop(0)
-
-        previous_tokens.append(token_to_index["\n"])
-        previous_tokens.pop(0)
-
-        print(language_model_text.rstrip(" "))
+    # while True:
+    #     user_input = ">persona< " + input("> ") + " >endoftext<\n>personb<"
+    #     tokens = tokenize(user_input)
+    #
+    #     for token in tokens:
+    #         previous_tokens.append(token_to_index[token])
+    #
+    #     language_model_token = -1
+    #
+    #     language_model_text = ""
+    #
+    #     while language_model_token != token_to_index[">endoftext<"]:
+    #         prediction = language_model.predict(np.array(previous_tokens))
+    #         print([index_to_token[np.argmax(pred)] for pred in prediction])
+    #         language_model_token = np.argmax(prediction[-1])
+    #         language_model_text += index_to_token[language_model_token] + " "
+    #         previous_tokens.append(language_model_token)
+    #
+    #     previous_tokens.append(token_to_index["\n"])
+    #
+    #     print(language_model_text.rstrip(" "))
 
 
 if __name__ == "__main__":

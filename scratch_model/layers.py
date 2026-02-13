@@ -1043,7 +1043,7 @@ class TimeDistributedLayerNorm:
         self.output_shape = None
 
     def init_weights(self, previous_layer_output_shape):
-        in_num = np.prod(previous_layer_output_shape)
+        in_num = np.prod(previous_layer_output_shape[1:])
         self.output_shape = previous_layer_output_shape
 
         self.weights = np.ones(in_num)

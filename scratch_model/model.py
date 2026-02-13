@@ -83,11 +83,11 @@ class Model:
                 if (j + 1) % batch_size == 0:
                     for layer in self.layers:
                         layer.update_weights(learning_rate / batch_size)
-                if (j + 1) % 10 == 0 and console_updates:
+                if (j + 1) % 100 == 0 and console_updates:
                     print(f"So far there is loss of {(total_loss / (j + 1)):.6f} and {(100 * (total_correct / (j + 1))):.4f}% accuracy.")
                     # print(f"Total correct: {total_correct}")
                     # print(f"Recurrent time: {layers.recurrent_time}")
-                    print(f"Loop time: {layers.loop_time}")
+                    # print(f"Loop time: {layers.loop_time}")
                     # print(f"Stack time: {layers.stack_time}")
                     # print(f"Embedding time: {layers.embedding_time}")
                     # print(f"Total convolution time: {layers.total_convolution_time:.6f}")
@@ -106,10 +106,12 @@ class Model:
 
     def test(self, data, labels):
         total_correct = 0
+        total_loss = 0
         for i in range(len(data)):
             prediction = self.predict(data[i])
             total_correct += self.accuracy_function(prediction, labels[i])
-        return total_correct / len(data)
+            total_loss += self.loss(prediction, labels[i])
+        return total_loss / len(data), total_correct / len(data)
 
     def get_param_num(self):
         param_num = 0
@@ -124,6 +126,28 @@ class Model:
 
     @classmethod
     def load(cls, filename):
+        # Test for loading models made on gpu while using cpu
+        if not hasattr(np, "_from_pickle"):
+            def _from_pickle(*args):
+                if len(args) == 3 and isinstance(args[0], (bytes, bytearray, memoryview)):
+                    rawdata, shape, dtype_obj = args
+                    dtype = np.dtype(dtype_obj)
+                    arr = np.frombuffer(rawdata, dtype=dtype)
+                    return arr.reshape(tuple(shape), order="C")
+
+                if len(args) == 4:
+                    shape, dtype_obj, is_fortran, rawdata = args
+                    dtype = np.dtype(dtype_obj)
+                    arr = np.frombuffer(rawdata, dtype=dtype)
+                    return arr.reshape(tuple(shape), order="F" if bool(is_fortran) else "C")
+
+                raise TypeError(
+                    f"Unsupported numpy._from_pickle signature: "
+                    f"len={len(args)}, types={[type(a) for a in args]}"
+                )
+
+            np._from_pickle = _from_pickle
+
         path = filename if filename.endswith(".pkl") else filename + ".pkl"
         with open(path, "rb") as file:
             return pickle.load(file)

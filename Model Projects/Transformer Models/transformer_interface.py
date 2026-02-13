@@ -54,43 +54,43 @@ def main():
 
     language_model = Model.load("Models/test_distributed")
 
-    index = 2
+    # index = 2
 
-    print([index_to_token[d] for d in data[1]])
-    prediction = language_model.predict(data[index])
-    predicted_tokens = [index_to_token[np.argmax(pred)] for pred in prediction]
-    label_tokens = [index_to_token[np.argmax(l)] for l in labels[index]]
+    # print([index_to_token[d] for d in data[1]])
+    # prediction = language_model.predict(data[index])
+    # predicted_tokens = [index_to_token[np.argmax(pred)] for pred in prediction]
+    # label_tokens = [index_to_token[np.argmax(l)] for l in labels[index]]
 
-    print()
-    print(predicted_tokens)
-    print(label_tokens)
-
-    model_accuracy = sum(predicted_tokens[i] == label_tokens[i] for i in range(len(label_tokens))) / len(label_tokens)
-    print(f"Accuracy: {model_accuracy}")
+    # print()
+    # print(predicted_tokens)
+    # print(label_tokens)
+    #
+    # model_accuracy = sum(predicted_tokens[i] == label_tokens[i] for i in range(len(label_tokens))) / len(label_tokens)
+    # print(f"Accuracy: {model_accuracy}")
 
     previous_tokens = []
 
-    # while True:
-    #     user_input = ">persona< " + input("> ") + " >endoftext<\n>personb<"
-    #     tokens = tokenize(user_input)
-    #
-    #     for token in tokens:
-    #         previous_tokens.append(token_to_index[token])
-    #
-    #     language_model_token = -1
-    #
-    #     language_model_text = ""
-    #
-    #     while language_model_token != token_to_index[">endoftext<"]:
-    #         prediction = language_model.predict(np.array(previous_tokens))
-    #         print([index_to_token[np.argmax(pred)] for pred in prediction])
-    #         language_model_token = np.argmax(prediction[-1])
-    #         language_model_text += index_to_token[language_model_token] + " "
-    #         previous_tokens.append(language_model_token)
-    #
-    #     previous_tokens.append(token_to_index["\n"])
-    #
-    #     print(language_model_text.rstrip(" "))
+    while True:
+        user_input = ">persona< " + input("> ") + " >endoftext<\n>personb<"
+        tokens = tokenize(user_input)
+
+        for token in tokens:
+            previous_tokens.append(token_to_index[token])
+
+        language_model_token = -1
+
+        language_model_text = ""
+
+        while language_model_token != token_to_index[">endoftext<"]:
+            prediction = language_model.predict(np.array(previous_tokens))
+            # print([index_to_token[np.argmax(pred)] for pred in prediction])
+            language_model_token = np.argmax(prediction[-1])
+            language_model_text += index_to_token[language_model_token] + " "
+            previous_tokens.append(language_model_token)
+
+        previous_tokens.append(token_to_index["\n"])
+
+        print(language_model_text.rstrip(" "))
 
 
 if __name__ == "__main__":

@@ -39,8 +39,6 @@ def sample_with_temperature(probs, temperature=1.0):
 
 
 def main():
-    context = 150
-
     vocab_size = len(vocab)
     word_to_index = {word: i for i, word in enumerate(vocab)}
     index_to_word = {i: word for i, word in enumerate(vocab)}
@@ -48,11 +46,11 @@ def main():
 
     print(word_to_index)
 
-    language_model = model.Model.load("Models/tinychat_v2_8000")
+    language_model = Model.load("Models/numpy_tinychat_v2_100000")
 
     print(f"Model param num: {language_model.get_param_num()}")
 
-    chat_history = [0 for _ in range(context)]
+    chat_history = []
     while True:
         user_prompt = "[/INST] " + input("> ") + " [INST]"
         input_tokens = tokenize(user_prompt)
@@ -64,17 +62,15 @@ def main():
         # check for what unknown character is
         chat_history += [word_to_index[token] if token in known_tokens else 0 for token in input_tokens]
 
-        while len(chat_history) > context:
-            chat_history.pop(0)
-
         ai_response = []
         num = 0
         while num < 50:
             # Currently just do max rather than probability distribution
             prediction = language_model.predict(np.array(chat_history))[-1]
-            print(prediction)
-            # Can't be <unk> so [1:] and +1
-            next_token = sample_with_temperature(prediction[1:], temperature=0.3) + 1
+            # Can't be <unk> or [inst] so set probability to 0 (can be [/inst] though to end)
+            prediction[0] = 0
+            prediction[1] = 0
+            next_token = sample_with_temperature(prediction, temperature=0.7)
 
             token_string = index_to_word[next_token]
             if token_string == "[/inst]":
@@ -83,13 +79,8 @@ def main():
             ai_response.append(next_token)
 
             chat_history.append(next_token)
-            while len(chat_history) > context:
-                chat_history.pop(0)
 
             num += 1
-
-        while len(chat_history) > context:
-            chat_history.pop(0)
 
         ai_response_string = ""
         for token in ai_response:
@@ -98,7 +89,8 @@ def main():
 
 
 vocab = load_vocab()
-from scratch_model import model
+from scratch_model import *
+# import numpy as np
 
 if __name__ == "__main__":
     main()

@@ -88,11 +88,8 @@ def main():
 
     data, labels, vocab = load_data("Training Data/conversations.txt")
 
-    embedding_dimension = 256
-    attention_dimension = 512
+    d_model = 512
     feed_forward_dimension = 2048
-
-    dropout_percent = 0.1
 
     vocab_size = len(vocab)
 
@@ -103,45 +100,39 @@ def main():
         model_functions.softmax_cross_entropy,
         (-1,),
         [
-            layers.Embedding(embedding_dimension, vocab_size, model_functions.linear),
+            layers.Embedding(d_model, vocab_size, model_functions.linear),
 
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
             ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+                layers.TimeDistributedDense(d_model, model_functions.linear),
             ),
 
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
             ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+                layers.TimeDistributedDense(d_model, model_functions.linear),
             ),
 
-            layers.Attention(attention_dimension, attention_dimension, mask=model_functions.causal_mask),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
             ),
-            layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
-            layers.TimeDistributedDense(attention_dimension, model_functions.linear),
-            layers.Loop(
-                layers.Dropout(dropout_percent),
-                layers.LayerNorm(),
+            layers.ResidualBlock(
+                layers.TimeDistributedLayerNorm(),
+                layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
+                layers.TimeDistributedDense(d_model, model_functions.linear),
             ),
 
-            layers.TimeDistributedDense(attention_dimension, model_functions.relu),
+            layers.TimeDistributedLayerNorm(),
 
             layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
         ],

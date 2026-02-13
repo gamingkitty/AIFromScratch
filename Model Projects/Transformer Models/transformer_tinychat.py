@@ -116,12 +116,12 @@ def main():
 
     vocab_size = len(vocab)
 
-    print("Converting arrays")
-    data = [np.array(d) for d in tinychat_data]
-    labels = [np.array(l) for l in tinychat_labels]
-    print("Finished converting arrays")
-
-    dropout_percent = 0.05
+    # print("Converting arrays")
+    # data = [np.array(d) for d in tinychat_data]
+    # labels = [np.array(l) for l in tinychat_labels]
+    # print("Finished converting arrays")
+    data = tinychat_data
+    labels = tinychat_labels
 
     print(f"Vocab Size: {vocab_size}")
     print(f"Data Size: {len(data)}")
@@ -133,102 +133,71 @@ def main():
     #         layers.Embedding(d_model, vocab_size, model_functions.linear),
     #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
-    #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
     #             layers.TimeDistributedDense(d_model, model_functions.linear),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
     #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
-    #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
     #             layers.TimeDistributedDense(d_model, model_functions.linear),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
     #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.Attention(d_model, d_model, mask=model_functions.causal_mask),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
-    #
     #         layers.ResidualBlock(
-    #             layers.Loop(
-    #                 layers.LayerNorm(),
-    #             ),
+    #             layers.TimeDistributedLayerNorm(),
     #             layers.TimeDistributedDense(feed_forward_dimension, model_functions.relu),
     #             layers.TimeDistributedDense(d_model, model_functions.linear),
-    #             layers.Loop(
-    #                 layers.Dropout(dropout_percent),
-    #             )
     #         ),
     #
-    #         layers.Loop(
-    #             layers.LayerNorm(),
-    #         ),
+    #         layers.TimeDistributedLayerNorm(),
     #
     #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
     #     ],
     #     accuracy_function=accuracy,
     # )
-    language_model = Model.load("Models/tinychat_v2_8000")
+    language_model = Model.load("Models/tinychat_v2_100000")
 
-    prediction = language_model.predict(data[0])
+    print(f"Param num: {language_model.get_param_num()}")
 
-    print([vocab[l] for l in labels[0]])
-    print([vocab[np.argmax(pred)] for pred in prediction])
+    # initial_accuracy = language_model.test(data, labels)
+    # print(f"Initial accuracy: {initial_accuracy * 100:.2f}%")
 
-    # print(f"Param num: {language_model.get_param_num()}")
+    # test_conversations = 1000
+    # test_set_start = 80000
+    # test_set_end = test_set_start + test_conversations
+    # test_data = [np.array(data[i]) for i in range(test_set_start, test_set_end)]
+    # test_labels = [np.array(to_one_hot(labels[i], vocab_size)) for i in range(test_set_start, test_set_end)]
     #
-    # # initial_accuracy = language_model.test(data, labels)
-    # # print(f"Initial accuracy: {initial_accuracy * 100:.2f}%")
-    #
-    # train_size = 2000
-    # start = 4000
-    # while start < len(data):
-    #     end = min(start + train_size, len(data))
-    #     language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
-    #     print(f"Finished training on conversations {start} to {end}")
-    #     start += train_size
-    #     language_model.save(f"Models/tinychat_v2_{end}")
-    #
-    # language_model.fit(data, labels, epochs, learning_rate)
+    # print(f"Testing model...")
+    # test_loss, test_accuracy = language_model.test(test_data, test_labels)
+    # print(f"Model has loss of {test_loss} and accuracy of {test_accuracy * 100}% on the test data set.")
+
+    train_size = 5000
+    start = 100000
+    while start < len(data):
+        end = min(start + train_size, len(data))
+        language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
+        print(f"Finished training on conversations {start} to {end}")
+        start += train_size
+        language_model.save(f"Models/tinychat_v2_{end}")
 
 
 tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat_topk()
 print("Loaded tinychat!")
 from scratch_model import *
+import numpy as np
 if __name__ == "__main__":
     main()

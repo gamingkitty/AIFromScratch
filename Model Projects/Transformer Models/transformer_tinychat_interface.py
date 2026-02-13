@@ -48,7 +48,7 @@ def main():
 
     print(word_to_index)
 
-    language_model = model.Model.load("Models/tinychat_v1_30000")
+    language_model = model.Model.load("Models/tinychat_v2_8000")
 
     print(f"Model param num: {language_model.get_param_num()}")
 
@@ -69,9 +69,10 @@ def main():
 
         ai_response = []
         num = 0
-        while num < 80:
+        while num < 50:
             # Currently just do max rather than probability distribution
             prediction = language_model.predict(np.array(chat_history))[-1]
+            print(prediction)
             # Can't be <unk> so [1:] and +1
             next_token = sample_with_temperature(prediction[1:], temperature=0.3) + 1
 

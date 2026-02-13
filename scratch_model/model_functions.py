@@ -123,4 +123,4 @@ softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_derivativ
 
 
 def causal_mask(t):
-    return np.triu(np.ones((t, t), dtype=bool))
+    return np.tril(np.ones((t, t), dtype=bool))

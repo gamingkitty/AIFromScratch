@@ -143,10 +143,7 @@ def main():
 
             layers.TimeDistributedDense(attention_dimension, model_functions.relu),
 
-            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax), 6
-            #layers.Loop(
-            #    layers.Dense(vocab_size, model_functions.softmax)
-            #)
+            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
         ],
         accuracy_function=accuracy,
     )

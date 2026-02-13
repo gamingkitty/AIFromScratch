@@ -65,8 +65,8 @@ def main():
     print(predicted_tokens)
     print(label_tokens)
 
-    accuracy = sum(predicted_tokens[i] == label_tokens[i] for i in range(len(label_tokens))) / len(label_tokens)
-    print(f"Accuracy: {accuracy}")
+    model_accuracy = sum(predicted_tokens[i] == label_tokens[i] for i in range(len(label_tokens))) / len(label_tokens)
+    print(f"Accuracy: {model_accuracy}")
 
     previous_tokens = []
 

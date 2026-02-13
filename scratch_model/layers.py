@@ -784,7 +784,7 @@ class Attention:
         attention_scores = e_xs / np.sum(e_xs, axis=1, keepdims=True)
 
         # Multiply attention scores by corresponding values and sum
-        output = np.tensordot(attention_scores.T, values, axes=[1, 0])
+        output = np.tensordot(attention_scores, values, axes=[1, 0])
 
         return (queries, keys, values, attention_scores), output
 
@@ -792,10 +792,10 @@ class Attention:
         queries, keys, values, attention_scores = this_layer_z
         t = prev_layer_a.shape[0]
 
-        dc_dv = np.tensordot(attention_scores, dc_da, axes=[1, 0])
+        dc_dv = np.tensordot(attention_scores.T, dc_da, axes=[1, 0])
         self.value_gradient += np.dot(prev_layer_a.T, dc_dv)
 
-        dc_dattention = np.dot(values, dc_da.T)
+        dc_dattention = np.dot(dc_da, values.T)
 
         # Softmax derivative
         n, m = attention_scores.shape
@@ -977,4 +977,118 @@ class Reshape:
 
     def count_params(self):
         return 0
+
+
+class ResidualBlock:
+    def __init__(self, *layers):
+        self.layers = layers
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape):
+        for layer in self.layers:
+            layer.init_weights(previous_layer_output_shape)
+            previous_layer_output_shape = layer.get_output_shape()
+        self.output_shape = self.layers[-1].get_output_shape()
+
+        if self.output_shape != previous_layer_output_shape:
+            raise ValueError("Input and output shape mismatch! Projection not yet implemented.")
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        z_data = []
+        a_data = [prev_layer_activation]
+
+        last_value = prev_layer_activation
+        for i in range(len(self.layers)):
+            z_data_current, a_data_current = self.layers[i].forward_pass(last_value)
+            last_value = a_data_current
+            a_data.append(a_data_current)
+            z_data.append(z_data_current)
+
+        a_data[-1] = a_data[-1] + prev_layer_activation
+
+        return (a_data, z_data), a_data[-1]
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        a_data, z_data = this_layer_z
+        current_dc_da = dc_da
+        for i in reversed(range(len(self.layers))):
+            current_dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], current_dc_da)
+        return current_dc_da + dc_da
+
+    def update_weights(self, learning_rate):
+        for layer in self.layers:
+            layer.update_weights(learning_rate)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        param_num = 0
+        for layer in self.layers:
+            param_num += layer.count_params()
+        return param_num
+
+
+class TimeDistributedLayerNorm:
+    def __init__(self):
+        self.epsilon = 1e-5
+        self.weights = None
+        self.weights_gradient = None
+        self.biases = None
+        self.biases_gradient = None
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape):
+        in_num = np.prod(previous_layer_output_shape)
+        self.output_shape = previous_layer_output_shape
+
+        self.weights = np.ones(in_num)
+        self.weights_gradient = np.zeros_like(self.weights)
+        self.biases = np.zeros(in_num)
+        self.biases_gradient = np.zeros_like(self.biases)
+
+    def predict(self, prev_layer_activation):
+        z, a = self.forward_pass(prev_layer_activation)
+        return a
+
+    def forward_pass(self, prev_layer_activation):
+        dif_mean = (prev_layer_activation - prev_layer_activation.mean(axis=1)[:, np.newaxis])
+        epsilon_std = np.sqrt(prev_layer_activation.var(axis=1) + self.epsilon)
+
+        quotient = dif_mean / epsilon_std[:, np.newaxis]
+
+        out = (self.weights * quotient) + self.biases
+
+        return (epsilon_std, quotient, dif_mean), out
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        epsilon_std, quotient, dif_mean = this_layer_z
+
+        self.weights_gradient += np.sum(quotient * dc_da, axis=0)
+        self.biases_gradient += np.sum(dc_da, axis=0)
+
+        g = dc_da * self.weights
+
+        # new_dc_da = ((g - (g.sum() / n)) / epsilon_std) - ((dif_mean * np.dot(dif_mean, g)) / (n * np.pow(epsilon_std, 3)))
+        # Equivalent but slightly faster version
+        new_dc_da = (g - g.mean(axis=1)[:, np.newaxis] - quotient * (g * quotient).mean(axis=1)[:, np.newaxis]) / epsilon_std[:, np.newaxis]
+
+        return new_dc_da
+
+    def update_weights(self, learning_rate):
+        self.weights -= learning_rate * self.weights_gradient
+        self.biases -= learning_rate * self.biases_gradient
+
+        self.weights_gradient = np.zeros_like(self.weights)
+        self.biases_gradient = np.zeros_like(self.biases)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.weights.shape) + np.prod(self.biases.shape)
 

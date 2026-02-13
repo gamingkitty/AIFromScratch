@@ -104,28 +104,54 @@ if __name__ == "__main__":
     # print(raw_attention_scores)
     # print(attention_scores)
 
-    test = np.array([
-        [1, 2, 3],
-        [1, 3, 4]
-    ])
-    test_da_dz = np.array([
-        [
-            [3, 4, 5],
-            [5, 6, 7],
-            [6, 7, 8]
-        ],
-        [
-            [3, 4, 6],
-            [2, 6, 1],
-            [6, 3, 8]
-        ]
-    ])
+    # test = np.array([
+    #     [1, 2, 3],
+    #     [1, 3, 4]
+    # ])
+    # test_da_dz = np.array([
+    #     [
+    #         [3, 4, 5],
+    #         [5, 6, 7],
+    #         [6, 7, 8]
+    #     ],
+    #     [
+    #         [3, 4, 6],
+    #         [2, 6, 1],
+    #         [6, 3, 8]
+    #     ]
+    # ])
 
     # print(np.dot(test_dc_da[1], test_da_dz[1]))
     # print(np.einsum('ij,ijk->ik', test_dc_da, test_da_dz))
 
-    print(np.einsum('ij,ijk->ik', test, test_da_dz))
-    print(np.dot(test[1], test_da_dz[1]))
+    # print(np.einsum('ij,ijk->ik', test, test_da_dz))
+    # print(np.dot(test[1], test_da_dz[1]))
+
+    # values = np.array([
+    #     [1, 2, 3],
+    #     [4, 5, 6]
+    # ])
+    #
+    # dc_da = np.array([
+    #     [1, 2, 3],
+    #     [3, 4, 5]
+    # ])
+    #
+    # print(np.dot(dc_da, values.T))
+
+    g = np.array([
+        [1, 2, 3],
+        [3, 4, 5]
+    ])
+
+    quotient = np.array([
+        [3, 4, 5],
+        [6, 7, 8]
+    ])
+
+    epsilon_std = np.array([2, 3])
+
+    # print(dc_da @ values.T)
 
     # print(test_da_dz[:, :, np.newaxis])
 

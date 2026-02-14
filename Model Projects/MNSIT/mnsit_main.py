@@ -189,6 +189,131 @@ if __name__ == "__main__":
     #
     # print(np.sum(token[:, :, np.newaxis] * dc_dq[:, np.newaxis], axis=0))
 
+
+    test_input = np.array([
+        [1, 2],
+        [4, 5],
+        [2, 3],
+    ])
+
+    dc_da = np.array([
+        [
+            [1, 2],
+            [4, 5],
+            [2, 3],
+        ],
+        [
+            [1, 3],
+            [2, 5],
+            [2, 4],
+        ]
+    ])
+
+
+
+    test_queries = np.array([
+        [
+            [2, 3],
+            [4, 5],
+            [6, 7]
+        ],
+        [
+            [1, 3],
+            [4, 5],
+            [6, 7]
+        ]
+    ])
+
+    test_keys = np.array([
+        [
+            [2, 3],
+            [2, 4],
+            [5, 7]
+        ],
+        [
+            [1, 3],
+            [3, 5],
+            [6, 7]
+        ]
+    ])
+
+    test_key_weights = np.array([
+        [
+            [1, 2],
+            [3, 4]
+        ],
+        [
+            [3, 4],
+            [5, 6]
+        ],
+    ])
+
+    test_mask = np.array([
+        [1, 1, 0],
+        [1, 0, 0],
+        [0, 0, 0]
+    ])
+
+    attentions = np.einsum('htv,hsv->hts', test_queries, test_keys)
+    # print(attentions)
+    # # print(attentions * test_mask)
+    # e_xs = np.exp(attentions[1] - np.max(attentions[1], axis=1, keepdims=True))
+    # softmax = e_xs / np.sum(e_xs, axis=1, keepdims=True)
+    # print(softmax)
+
+    # print(np.tensordot(attentions[0], test_queries[0], axes=[1, 0]))
+
+    # dc_dv = np.einsum('hts,tv->hsv', attentions, dc_da)
+
+    h, n, m = attentions.shape
+    idx = np.arange(m)
+    diagonals = np.zeros((h, n, m, m), dtype=attentions.dtype)
+    diagonals[:, :, idx, idx] = attentions
+
+    dattention_draw = diagonals - (attentions[:, :, :, np.newaxis] * attentions[:, :, np.newaxis, :])
+    # print(dattention_draw)
+
+    dc_draw = np.sum((attentions[:, :, :, np.newaxis] * dattention_draw), axis=2)
+
+    # print(np.dot(dc_draw[1].T, test_queries[1]))
+    # print(np.einsum('hts,htk->hsk', dc_draw, test_queries))
+
+    dc_draw_test = attentions * (
+            attentions - np.sum(attentions * attentions, axis=2, keepdims=True)
+    )
+
+    # print(dc_draw)
+    print(dc_draw_test)
+
+    test_r = np.array([
+        [1, 2],
+        [3, 4]
+    ])
+
+    test_keys_2 = np.array([
+        [1, 2, 3],
+        [4, 5, 6]
+    ])
+
+
+    # print(np.dot(test_r, test_keys_2))
+    print(np.einsum('hst,htk->hsk', dc_draw, test_keys))
+    print(np.einsum('hts,hsk->htk', dc_draw, test_keys))
+
+    # print(np.tensordot(dc_dk[0], test_key_weights[0].T, axes=[1, 0]))
+    # print(np.sum(np.einsum('htk,hik->hti', dc_dk, test_key_weights), axis=0))
+
+    # print(np.tensordot(dc_dk[0], test_key_weights[0].T, axes=[1, 0]))
+
+    # print(np.tensordot(dc_da, dc_dv, axes=[0, 1]))
+    # print(np.einsum('ti,htv->hiv', dc_da, dc_dv))
+    # print(np.einsum('tv,htv->hiv', dc_da, dc_dv))
+
+    # output = np.einsum('hts,hsv->htv', attentions, test_queries)
+    # print(output)
+    # concat_output = output.transpose(1, 0, 2).reshape(output.shape[1], -1)
+    # print(concat_output)
+
     # print(test[:, :, np.newaxis])
     #
     # print(np.sum((test[:, :, np.newaxis] * values), axis=1))

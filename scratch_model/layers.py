@@ -305,11 +305,10 @@ class MaxPooling:
 
 # Assumes input is something one hot encoded.
 class Embedding:
-    def __init__(self, embedding_dimension, vocab_size, activation_function, input_shape=None):
+    def __init__(self, embedding_dimension, vocab_size, input_shape=None):
         self.neuron_num = embedding_dimension
         self.vocab_size = vocab_size
         self.input_shape = input_shape
-        self.activation_function = activation_function
         self.weights = np.array([])
         self.gradient = np.array([])
         self.output_shape = None
@@ -330,31 +329,17 @@ class Embedding:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
-        global embedding_time
-        start_time = time.perf_counter()
         prev_layer_activation = prev_layer_activation.reshape(self.input_shape)
         z_data = self.weights[prev_layer_activation]
-        a_data = self.activation_function(z_data)
 
-        embedding_time += time.perf_counter() - start_time
-
-        return z_data, a_data
+        return z_data, z_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        global embedding_time
-        start_time = time.perf_counter()
-        dc_da = dc_da.reshape(self.output_shape)
-        if self.activation_function.is_elementwise:
-            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
-        else:
-            dc_dz = np.dot(dc_da, self.activation_function.derivative(this_layer_z))
-
         # self.gradient[prev_layer_a.reshape(self.input_shape)] += dc_dz
-        np.add.at(self.gradient, prev_layer_a.flatten(), dc_dz.reshape(-1, self.neuron_num))
+        np.add.at(self.gradient, prev_layer_a.flatten(), dc_da)
         # self.gradient[prev_layer_a] += dc_dz
 
-        dc_da = np.dot(dc_dz, self.weights.T)
-        embedding_time += time.perf_counter() - start_time
+        dc_da = np.dot(dc_da, self.weights.T)
         return dc_da
 
     def update_weights(self, learning_rate):
@@ -391,7 +376,7 @@ class Dropout:
         return None, a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        return dc_da * self.dz_da.flatten()
+        return dc_da * self.dz_da
 
     def update_weights(self, learning_rate):
         pass
@@ -722,7 +707,7 @@ class LayerNorm:
 
 
 class Attention:
-    def __init__(self, value_size, query_key_size, mask=None):
+    def __init__(self, value_size, query_key_size, heads, mask=None):
         self.value_size = value_size
         self.query_key_size = query_key_size
 
@@ -736,19 +721,23 @@ class Attention:
 
         self.output_shape = None
 
+        self.heads = heads
+
         self.mask = mask
+
+        self.scale = 1 / np.sqrt(self.query_key_size)
 
     def init_weights(self, previous_layer_output_shape):
         in_num = previous_layer_output_shape[1]
 
-        self.output_shape = (previous_layer_output_shape[0], self.value_size)
+        self.output_shape = (previous_layer_output_shape[0], self.heads * self.value_size)
 
         weight_limit_qk = math.sqrt(6 / (in_num + self.query_key_size))
         weight_limit_v = math.sqrt(6 / (in_num + self.value_size))
 
-        self.key_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (previous_layer_output_shape[1], self.query_key_size))
-        self.query_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (previous_layer_output_shape[1], self.query_key_size))
-        self.value_weights = np.random.uniform(-weight_limit_v, weight_limit_v, (previous_layer_output_shape[1], self.value_size))
+        self.key_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size))
+        self.query_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size))
+        self.value_weights = np.random.uniform(-weight_limit_v, weight_limit_v, (self.heads, previous_layer_output_shape[1], self.value_size))
 
         self.key_gradient = np.zeros_like(self.key_weights)
         self.query_gradient = np.zeros_like(self.query_weights)
@@ -761,30 +750,33 @@ class Attention:
     def forward_pass(self, prev_layer_activation):
         t = prev_layer_activation.shape[0]
 
-        # Shape (time, query/key/value size)
-        queries = np.tensordot(prev_layer_activation, self.query_weights, axes=[1, 0])
-        keys = np.tensordot(prev_layer_activation, self.key_weights, axes=[1, 0])
-        values = np.tensordot(prev_layer_activation, self.value_weights, axes=[1, 0])
+        # Shape (time, head, query/key/value size)
+        queries = np.einsum('ti,hiv->htv', prev_layer_activation, self.query_weights)
+        keys = np.einsum('ti,hiv->htv', prev_layer_activation, self.key_weights)
+        values = np.einsum('ti,hiv->htv', prev_layer_activation, self.value_weights)
 
         # Dot key and query values to get the attention scores
-        # Shape (query, key), so each row contains the values of query_i dot all keys,
+        # Shape (head, query, key), so each row contains the values of query_i dot all keys,
         # or how much token_i attends to all other tokens
-        raw_attention_scores = np.tensordot(queries, keys, axes=[1, 1]) / np.sqrt(self.query_key_size)
+        raw_attention_scores = np.einsum('htv,hsv->hts', queries, keys) * self.scale
 
         if self.mask is not None:
             mask = self.mask(t)
             raw_attention_scores = np.where(mask, raw_attention_scores, -1e9)
 
         # Softmax attention scores along key axis
-        e_xs = np.exp(raw_attention_scores - np.max(raw_attention_scores, axis=1, keepdims=True))
+        e_xs = np.exp(raw_attention_scores - np.max(raw_attention_scores, axis=2, keepdims=True))
 
         if self.mask is not None:
             e_xs *= mask
 
-        attention_scores = e_xs / np.sum(e_xs, axis=1, keepdims=True)
+        attention_scores = e_xs / np.sum(e_xs, axis=2, keepdims=True)
 
         # Multiply attention scores by corresponding values and sum
-        output = np.tensordot(attention_scores, values, axes=[1, 0])
+        output = np.einsum('hts,hsv->htv', attention_scores, values)
+
+        # Concatenate the heads
+        output = output.transpose(1, 0, 2).reshape(output.shape[1], -1)
 
         return (queries, keys, values, attention_scores), output
 
@@ -792,33 +784,38 @@ class Attention:
         queries, keys, values, attention_scores = this_layer_z
         t = prev_layer_a.shape[0]
 
-        dc_dv = np.tensordot(attention_scores.T, dc_da, axes=[1, 0])
-        self.value_gradient += np.dot(prev_layer_a.T, dc_dv)
+        dc_da = dc_da.reshape(t, self.heads, self.value_size).transpose(1, 0, 2)
 
-        dc_dattention = np.dot(dc_da, values.T)
+        dc_dv = np.einsum('hts,htv->hsv', attention_scores, dc_da)
+        self.value_gradient += np.einsum('ti,htv->hiv', prev_layer_a, dc_dv)
 
-        # Softmax derivative
-        n, m = attention_scores.shape
-        idx = np.arange(m)
-        diagonals = np.zeros((n, m, m), dtype=attention_scores.dtype)
-        diagonals[:, idx, idx] = attention_scores
+        dc_dattention = np.einsum('htv,hsv->hts', dc_da, values)
 
-        dattention_draw = diagonals - (attention_scores[:, :, np.newaxis] * attention_scores[:, np.newaxis, :])
+        # # Softmax derivative
+        # h, n, m = attention_scores.shape
+        # idx = np.arange(m)
+        # diagonals = np.zeros((h, n, m, m), dtype=attention_scores.dtype)
+        # diagonals[:, :, idx, idx] = attention_scores
+        #
+        # dattention_draw = diagonals - (attention_scores[:, :, :, np.newaxis] * attention_scores[:, :, np.newaxis, :])
+        #
+        # # Compute dc_draw
+        # dc_draw = np.sum((dc_dattention[:, :, :, np.newaxis] * dattention_draw), axis=2)
 
-        # Compute dc_draw
-        dc_draw = np.sum((dc_dattention[:, :, np.newaxis] * dattention_draw), axis=1)
+        # Faster direct dc_draw computation
+        dc_draw = attention_scores * (dc_dattention - np.sum(dc_dattention * attention_scores, axis=2, keepdims=True))
 
         if self.mask is not None:
             dc_draw *= self.mask(t)
 
         # Works because dr_dq/dc_dk for all queries/keys is the same, just (keys/queries) / sqrt(n)
-        dc_dquery = np.dot(dc_draw, keys / np.sqrt(self.query_key_size))
-        dc_dkey = np.dot(dc_draw.T, queries / np.sqrt(self.query_key_size))
+        dc_dquery = np.einsum('hst,htk->hsk', dc_draw, keys * self.scale)
+        dc_dkey = np.einsum('hts,htk->hsk', dc_draw, queries * self.scale)
 
-        self.query_gradient += np.dot(prev_layer_a.T, dc_dquery)
-        self.key_gradient += np.dot(prev_layer_a.T, dc_dkey)
+        self.query_gradient += np.einsum('ti,htq->hiq', prev_layer_a, dc_dquery)
+        self.key_gradient += np.einsum('ti,htk->hik', prev_layer_a, dc_dkey)
 
-        new_dc_da = np.tensordot(dc_dv, self.value_weights.T, axes=[1, 0]) + np.tensordot(dc_dquery, self.query_weights.T, axes=[1, 0]) + np.tensordot(dc_dkey, self.key_weights.T, axes=[1, 0])
+        new_dc_da = np.sum(np.einsum('htv,hiv->hti', dc_dv, self.value_weights) + np.einsum('htq,hiq->hti', dc_dquery, self.query_weights) + np.einsum('htk,hik->hti', dc_dkey, self.key_weights), axis=0)
         return new_dc_da
 
     def update_weights(self, learning_rate):

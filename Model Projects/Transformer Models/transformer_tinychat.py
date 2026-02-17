@@ -179,13 +179,13 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
         layers.ResidualBlock(
             layers.TimeDistributedLayerNorm(),
             layers.Attention(int(d_model / heads), int(d_model / heads), heads, mask=model_functions.causal_mask),
-            layers.TimeDistributedDense(d_model, model_functions.linear),
+            layers.TimeDistributedDense(d_model),
             layers.Dropout(dropout_percent),
         ),
         layers.ResidualBlock(
             layers.TimeDistributedLayerNorm(),
             layers.TimeDistributedDense(d_feed_forward, model_functions.gelu),
-            layers.TimeDistributedDense(d_model, model_functions.linear),
+            layers.TimeDistributedDense(d_model),
             layers.Dropout(dropout_percent),
         ),
     )

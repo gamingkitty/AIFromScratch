@@ -3,83 +3,101 @@ from collections import Counter
 from datasets import load_dataset
 import re
 import numpy as np
+from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
 
 
-def tokenize_tinychat(text):
-    pattern = r"\[/?inst\]|[a-z0-9]+(?:'[a-z0-9]+)?|[^\w\s]"
-    return re.findall(pattern, text.lower())
+SPECIAL_TOKENS = ["[INST]", "[/INST]", "[UNK]"]
 
 
-def load_tinychat(cache_path="tinychat_indices.npz"):
-    if os.path.exists(cache_path):
+def build_or_load_tinychat_tokenizer(
+    tokenizer_path="tinychat_tokenizer.json",
+    vocab_size=8000,
+    min_frequency=2,
+):
+    if os.path.exists(tokenizer_path):
+        tok = Tokenizer.from_file(tokenizer_path)
+        _validate_required_tokens(tok)
+        return tok
+
+    ds = load_dataset("starhopp3r/TinyChat", split="train")
+
+    def text_iterator():
+        for ex in ds:
+            txt = ex.get("text", "")
+            if txt and txt.strip():
+                yield txt
+
+    tokenizer = Tokenizer(models.BPE(unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+    tokenizer.decoder = decoders.ByteLevel()
+
+    trainer = trainers.BpeTrainer(
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+        special_tokens=SPECIAL_TOKENS,
+    )
+    tokenizer.train_from_iterator(text_iterator(), trainer=trainer)
+
+    _validate_required_tokens(tokenizer)
+    tokenizer.save(tokenizer_path)
+    return tokenizer
+
+
+def _validate_required_tokens(tokenizer):
+    missing = [t for t in SPECIAL_TOKENS if tokenizer.token_to_id(t) is None]
+    if missing:
+        raise ValueError(
+            f"Tokenizer is missing required special tokens: {missing}. "
+            "Delete tokenizer file and retrain."
+        )
+
+
+def tokenize_tinychat(text, tokenizer):
+    return tokenizer.encode(text).ids
+
+
+def load_tinychat(
+    cache_path="tinychat_indices.npz",
+    tokenizer_path="tinychat_tokenizer.json",
+    vocab_size=8000,
+    min_frequency=2,
+):
+    # Fast path: load precomputed cache
+    if os.path.exists(cache_path) and os.path.exists(tokenizer_path):
         cache = np.load(cache_path, allow_pickle=True)
         return list(cache["data"]), list(cache["labels"]), list(cache["vocab"])
 
-    ds = load_dataset("starhopp3r/TinyChat", split="train")
-    conversations = [tokenize_tinychat(ex["text"]) for ex in ds if ex["text"].strip()]
+    tokenizer = build_or_load_tinychat_tokenizer(
+        tokenizer_path=tokenizer_path,
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+    )
 
-    vocab = sorted(set(tok for conv in conversations for tok in conv))
-    token_to_index = {t: i for i, t in enumerate(vocab)}
+    ds = load_dataset("starhopp3r/TinyChat", split="train")
 
     data, labels = [], []
-    for conv in conversations:
-        if len(conv) < 2:
-            continue
-        idx = np.array([token_to_index[t] for t in conv], dtype=np.int32)
-        data.append(idx[:-1])
-        labels.append(idx[1:])  # only store indices, not one-hots
-
-    np.savez_compressed(cache_path,
-                        data=np.array(data, dtype=object),
-                        labels=np.array(labels, dtype=object),
-                        vocab=np.array(vocab))
-    return data, labels, vocab
-
-
-def load_tinychat_topk(max_vocab: int = 2500, cache_path: str = "tinychat_topk_indices_2500.npz"):
-    # Fast path: load cached
-    if os.path.exists(cache_path):
-        cache = np.load(cache_path, allow_pickle=True)
-        return list(cache["data"]), list(cache["labels"]), list(cache["vocab"])
-
-    ds = load_dataset("starhopp3r/TinyChat", split="train")
-
-    # 1) Tokenize + count frequencies in one pass (streaming to save RAM)
-    freq = Counter()
-    conversations = []  # store tokenized convs; if memory is tight, chunk this
     for ex in ds:
-        text = ex["text"]
+        text = ex.get("text", "")
         if not text or not text.strip():
             continue
-        toks = tokenize_tinychat(text)
-        if len(toks) < 2:
+
+        ids = tokenize_tinychat(text, tokenizer)
+
+        # Need at least 2 tokens for next-token prediction
+        if len(ids) < 2:
             continue
-        conversations.append(toks)
-        freq.update(toks)
 
-    # 2) Build capped vocab with UNK and required specials
-    specials = ["<unk>", "[inst]", "[/inst]"]  # ensure these exist
-    # Remove specials from freq before selecting top-K so they don't get double-counted
-    for s in specials:
-        if s in freq:
-            del freq[s]
+        arr = np.asarray(ids, dtype=np.int32)
+        data.append(arr[:-1])
+        labels.append(arr[1:])
 
-    keep_n = max(0, max_vocab - len(specials))
-    most_common = [t for (t, _) in freq.most_common(keep_n)]
-    vocab = specials + most_common
-    token_to_index = {t: i for i, t in enumerate(vocab)}
-    unk_id = token_to_index["<unk>"]
+    # Build id->token vocab list
+    token_to_id = tokenizer.get_vocab()  # dict token -> id
+    vocab_size_actual = tokenizer.get_vocab_size()
+    vocab = [""] * vocab_size_actual
+    for tok, idx in token_to_id.items():
+        vocab[int(idx)] = tok
 
-    # 3) Encode each conversation to indices (no one-hot here)
-    data, labels = [], []
-    for toks in conversations:
-        ids = np.fromiter((token_to_index.get(t, unk_id) for t in toks), dtype=np.int32)
-        if ids.size < 2:
-            continue
-        data.append(ids[:-1])
-        labels.append(ids[1:])
-
-    # 4) Cache to disk (indices only → tiny + fast)
     np.savez_compressed(
         cache_path,
         data=np.array(data, dtype=object),
@@ -87,6 +105,59 @@ def load_tinychat_topk(max_vocab: int = 2500, cache_path: str = "tinychat_topk_i
         vocab=np.array(vocab, dtype=object),
     )
     return data, labels, vocab
+
+
+# def load_tinychat_topk(max_vocab: int = 2500, cache_path: str = "tinychat_topk_indices_2500.npz"):
+#     # Fast path: load cached
+#     if os.path.exists(cache_path):
+#         cache = np.load(cache_path, allow_pickle=True)
+#         return list(cache["data"]), list(cache["labels"]), list(cache["vocab"])
+#
+#     ds = load_dataset("starhopp3r/TinyChat", split="train")
+#
+#     # 1) Tokenize + count frequencies in one pass (streaming to save RAM)
+#     freq = Counter()
+#     conversations = []  # store tokenized convs; if memory is tight, chunk this
+#     for ex in ds:
+#         text = ex["text"]
+#         if not text or not text.strip():
+#             continue
+#         toks = tokenize_tinychat(text)
+#         if len(toks) < 2:
+#             continue
+#         conversations.append(toks)
+#         freq.update(toks)
+#
+#     # 2) Build capped vocab with UNK and required specials
+#     specials = ["<unk>", "[inst]", "[/inst]"]  # ensure these exist
+#     # Remove specials from freq before selecting top-K so they don't get double-counted
+#     for s in specials:
+#         if s in freq:
+#             del freq[s]
+#
+#     keep_n = max(0, max_vocab - len(specials))
+#     most_common = [t for (t, _) in freq.most_common(keep_n)]
+#     vocab = specials + most_common
+#     token_to_index = {t: i for i, t in enumerate(vocab)}
+#     unk_id = token_to_index["<unk>"]
+#
+#     # 3) Encode each conversation to indices (no one-hot here)
+#     data, labels = [], []
+#     for toks in conversations:
+#         ids = np.fromiter((token_to_index.get(t, unk_id) for t in toks), dtype=np.int32)
+#         if ids.size < 2:
+#             continue
+#         data.append(ids[:-1])
+#         labels.append(ids[1:])
+#
+#     # 4) Cache to disk (indices only → tiny + fast)
+#     np.savez_compressed(
+#         cache_path,
+#         data=np.array(data, dtype=object),
+#         labels=np.array(labels, dtype=object),
+#         vocab=np.array(vocab, dtype=object),
+#     )
+#     return data, labels, vocab
 
 
 def accuracy(prediction, label):
@@ -108,11 +179,12 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
         layers.ResidualBlock(
             layers.TimeDistributedLayerNorm(),
             layers.Attention(int(d_model / heads), int(d_model / heads), heads, mask=model_functions.causal_mask),
+            layers.TimeDistributedDense(d_model, model_functions.linear),
             layers.Dropout(dropout_percent),
         ),
         layers.ResidualBlock(
             layers.TimeDistributedLayerNorm(),
-            layers.TimeDistributedDense(d_feed_forward, model_functions.relu),
+            layers.TimeDistributedDense(d_feed_forward, model_functions.gelu),
             layers.TimeDistributedDense(d_model, model_functions.linear),
             layers.Dropout(dropout_percent),
         ),
@@ -121,24 +193,20 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
 
 def main():
     epochs = 1
-    learning_rate = 0.008
+    learning_rate = 0.005
 
     # data, labels, vocab = load_tinychat_topk()
 
-    d_model = 320
+    d_model = 384
     feed_forward_dimension = 4 * d_model
-    heads = 8
-    dropout_percent = 0.05
-    blocks = 8
+    heads = 6
+    dropout_percent = 0.1
+    blocks = 10
 
     vocab = tinychat_vocab
 
     vocab_size = len(vocab)
 
-    # print("Converting arrays")
-    # data = [np.array(d) for d in tinychat_data]
-    # labels = [np.array(l) for l in tinychat_labels]
-    # print("Finished converting arrays")
     data = tinychat_data
     labels = tinychat_labels
 
@@ -150,6 +218,7 @@ def main():
         (-1,),
         [
             layers.Embedding(d_model, vocab_size),
+            layers.PositionalEncoder(),
 
             *[
                 layer
@@ -163,34 +232,29 @@ def main():
         ],
         accuracy_function=accuracy,
     )
-    # language_model = Model.load("Models/tinychat_v2_100000")
+    # language_model = Model.load("Models/tinychat_v4_365000")
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    # initial_accuracy = language_model.test(data, labels)
-    # print(f"Initial accuracy: {initial_accuracy * 100:.2f}%")
-
-    # test_conversations = 1000
-    # test_set_start = 80000
-    # test_set_end = test_set_start + test_conversations
-    # test_data = [np.array(data[i]) for i in range(test_set_start, test_set_end)]
-    # test_labels = [np.array(to_one_hot(labels[i], vocab_size)) for i in range(test_set_start, test_set_end)]
-    #
-    # print(f"Testing model...")
-    # test_loss, test_accuracy = language_model.test(test_data, test_labels)
-    # print(f"Model has loss of {test_loss} and accuracy of {test_accuracy * 100}% on the test data set.")
-
-    train_size = 2000
+    blocks_to_save = 10
+    cur_save_num = 0
+    train_size = 1000
     start = 0
     while start < len(data):
         end = min(start + train_size, len(data))
         language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
         print(f"Finished training on conversations {start} to {end}")
         start += train_size
-        language_model.save(f"Models/tinychat_v3_{end}")
+        cur_save_num += 1
+        if cur_save_num >= blocks_to_save:
+            language_model.save(f"Models/tinychat_v5_{end}")
+            cur_save_num = 0
+
+    language_model.save(f"Models/tinychat_v5_1000000")
 
 
-tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat_topk()
+tinychat_tokenizer = build_or_load_tinychat_tokenizer()
+tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat()
 print("Loaded tinychat!")
 from scratch_model import *
 import numpy as np

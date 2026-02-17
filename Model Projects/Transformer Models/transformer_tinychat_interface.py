@@ -46,52 +46,51 @@ def main():
 
     print(word_to_index)
 
+    language_model = Model.load("Models/tinychat_v4_505000")
 
-    # language_model = Model.load("Models/numpy_tinychat_v2_100000")
-    #
-    # print(f"Model param num: {language_model.get_param_num()}")
-    #
-    # chat_history = []
-    # while True:
-    #     user_prompt = "[/INST] " + input("> ") + " [INST]"
-    #     input_tokens = tokenize(user_prompt)
-    #     not_in_vocab = False
-    #
-    #     if not_in_vocab:
-    #         continue
-    #
-    #     # check for what unknown character is
-    #     chat_history += [word_to_index[token] if token in known_tokens else 0 for token in input_tokens]
-    #
-    #     ai_response = []
-    #     num = 0
-    #     while num < 50:
-    #         # Currently just do max rather than probability distribution
-    #         prediction = language_model.predict(np.array(chat_history))[-1]
-    #         # Can't be <unk> or [inst] so set probability to 0 (can be [/inst] though to end)
-    #         prediction[0] = 0
-    #         prediction[1] = 0
-    #         next_token = sample_with_temperature(prediction, temperature=0.7)
-    #
-    #         token_string = index_to_word[next_token]
-    #         if token_string == "[/inst]":
-    #             break
-    #
-    #         ai_response.append(next_token)
-    #
-    #         chat_history.append(next_token)
-    #
-    #         num += 1
-    #
-    #     ai_response_string = ""
-    #     for token in ai_response:
-    #         ai_response_string += index_to_word[token] + " "
-    #     print(ai_response_string + "\n")
+    print(f"Model param num: {language_model.get_param_num()}")
+
+    chat_history = []
+    while True:
+        user_prompt = "[INST] " + input("> ") + " [/INST]"
+        input_tokens = tokenize(user_prompt)
+        not_in_vocab = False
+
+        if not_in_vocab:
+            continue
+
+        # check for what unknown character is
+        chat_history += [word_to_index[token] if token in known_tokens else 0 for token in input_tokens]
+
+        ai_response = []
+        num = 0
+        while num < 50:
+            # Currently just do max rather than probability distribution
+            prediction = language_model.predict(np.array(chat_history))[-1]
+            # Can't be <unk> or [inst] so set probability to 0 (can be [/inst] though to end)
+            prediction[0] = 0
+            prediction[2] = 0
+            next_token = sample_with_temperature(prediction, temperature=0.7)
+
+            token_string = index_to_word[next_token]
+            if token_string == "[inst]":
+                break
+
+            ai_response.append(next_token)
+
+            chat_history.append(next_token)
+
+            num += 1
+
+        ai_response_string = ""
+        for token in ai_response:
+            ai_response_string += index_to_word[token] + " "
+        print(ai_response_string + "\n")
 
 
 vocab = load_vocab()
 from scratch_model import *
-# import numpy as np
+import numpy as np
 
 if __name__ == "__main__":
     main()

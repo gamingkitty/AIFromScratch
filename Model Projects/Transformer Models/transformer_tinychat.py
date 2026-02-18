@@ -4,6 +4,7 @@ from datasets import load_dataset
 import re
 import numpy as np
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
+import time
 
 
 SPECIAL_TOKENS = ["[INST]", "[/INST]", "[UNK]"]
@@ -236,19 +237,32 @@ def main():
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    blocks_to_save = 100
+    prev_models = ["Models/tinychat_v5_30000"]
+
+    blocks_to_save = 50
     cur_save_num = 0
-    train_size = 3000
-    start = 0
+    train_size = 2000
+    start = 30000
     while start < len(data):
         end = min(start + train_size, len(data))
         language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
         print(f"Finished training on conversations {start} to {end}")
         start += train_size
         cur_save_num += 1
+        model_name = f"Models/tinychat_v5_{end}"
         if cur_save_num >= blocks_to_save:
-            language_model.save(f"Models/tinychat_v5_{end}")
+            if len(prev_models) >= 2:
+                os.remove(prev_models[0])
+                prev_models.pop(0)
+            prev_models.append(model_name)
+
+            time.sleep(1)
+            print(f"Saving model to {model_name}")
+            language_model.save(model_name)
             cur_save_num = 0
+
+    os.remove(prev_models[0])
+    time.sleep(1)
 
     language_model.save(f"Models/tinychat_v5_1000000")
 

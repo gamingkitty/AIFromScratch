@@ -213,32 +213,32 @@ def main():
     print(f"Vocab Size: {vocab_size}")
     print(f"Data Size: {len(data)}")
 
-    language_model = Model(
-        model_functions.softmax_cross_entropy,
-        (-1,),
-        [
-            layers.Embedding(d_model, vocab_size),
-            layers.PositionalEncoder(),
-
-            *[
-                layer
-                for _ in range(blocks)
-                for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
-            ],
-
-            layers.TimeDistributedLayerNorm(),
-
-            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
-        ],
-        accuracy_function=accuracy,
-    )
-    # language_model = Model.load("Models/tinychat_v4_365000")
+    # language_model = Model(
+    #     model_functions.softmax_cross_entropy,
+    #     (-1,),
+    #     [
+    #         layers.Embedding(d_model, vocab_size),
+    #         layers.PositionalEncoder(),
+    #
+    #         *[
+    #             layer
+    #             for _ in range(blocks)
+    #             for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
+    #         ],
+    #
+    #         layers.TimeDistributedLayerNorm(),
+    #
+    #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
+    #     ],
+    #     accuracy_function=accuracy,
+    # )
+    language_model = Model.load("Models/tinychat_v5_30000")
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    blocks_to_save = 10
+    blocks_to_save = 100
     cur_save_num = 0
-    train_size = 1000
+    train_size = 3000
     start = 0
     while start < len(data):
         end = min(start + train_size, len(data))

@@ -192,6 +192,16 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
     )
 
 
+def safe_remove(path: str):
+    try:
+        os.remove(path)
+        print(f"[cleanup] Deleted {path}")
+    except FileNotFoundError:
+        print(f"[cleanup] Not found (skip): {path}")
+    except Exception as e:
+        print(f"[cleanup] Failed to delete {path}: {e}")
+
+
 def main():
     epochs = 1
     learning_rate = 0.005
@@ -233,26 +243,26 @@ def main():
     #     ],
     #     accuracy_function=accuracy,
     # )
-    language_model = Model.load("Models/tinychat_v5_130000")
+    language_model = Model.load("Models/tinychat_v5_230000")
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    prev_models = ["Models/tinychat_v5_130000"]
+    prev_models = ["Models/tinychat_v5_230000.pkl"]
 
-    blocks_to_save = 50
+    blocks_to_save = 25
     cur_save_num = 0
     train_size = 2000
-    start = 130000
+    start = 230000
     while start < len(data):
         end = min(start + train_size, len(data))
         language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
         print(f"Finished training on conversations {start} to {end}")
         start += train_size
         cur_save_num += 1
-        model_name = f"Models/tinychat_v5_{end}"
+        model_name = f"Models/tinychat_v5_{end}.pkl"
         if cur_save_num >= blocks_to_save:
             if len(prev_models) >= 2:
-                os.remove(prev_models[0])
+                safe_remove(prev_models[0])
                 prev_models.pop(0)
             prev_models.append(model_name)
 
@@ -261,7 +271,7 @@ def main():
             language_model.save(model_name)
             cur_save_num = 0
 
-    os.remove(prev_models[0])
+    safe_remove(prev_models[0])
     time.sleep(1)
 
     language_model.save(f"Models/tinychat_v5_1000000")

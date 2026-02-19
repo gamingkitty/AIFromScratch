@@ -243,16 +243,16 @@ def main():
     #     ],
     #     accuracy_function=accuracy,
     # )
-    language_model = Model.load("Models/tinychat_v5_230000")
+    language_model = Model.load("Models/tinychat_v5_280000")
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    prev_models = ["Models/tinychat_v5_230000.pkl"]
+    prev_models = ["Models/tinychat_v5_280000.pkl"]
 
-    blocks_to_save = 25
+    blocks_to_save = 100
     cur_save_num = 0
     train_size = 2000
-    start = 230000
+    start = 280000
     while start < len(data):
         end = min(start + train_size, len(data))
         language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)

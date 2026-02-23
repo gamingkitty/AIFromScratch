@@ -100,7 +100,7 @@ def main():
         model_functions.softmax_cross_entropy,
         (-1,),
         [
-            layers.Embedding(d_model, vocab_size, model_functions.linear),
+            layers.Embedding(d_model, vocab_size),
 
             layers.ResidualBlock(
                 layers.TimeDistributedLayerNorm(),

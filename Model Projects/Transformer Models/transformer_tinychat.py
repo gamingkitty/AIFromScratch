@@ -5,6 +5,8 @@ import re
 import numpy as np
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
 import time
+import random
+import math
 
 
 SPECIAL_TOKENS = ["[INST]", "[/INST]", "[UNK]"]
@@ -108,6 +110,100 @@ def load_tinychat(
     return data, labels, vocab
 
 
+def load_tinychat_bucketed(
+    cache_path="tinychat_buckets.npz",
+    tokenizer_path="tinychat_tokenizer.json",
+    vocab_size=8000,
+    min_frequency=2,
+    min_len=2,        # minimum original token count BEFORE shift (must be >=2)
+    max_len=None,     # optional cap on original token count BEFORE shift
+):
+    # Fast path: load precomputed cache
+    if os.path.exists(cache_path) and os.path.exists(tokenizer_path):
+        cache = np.load(cache_path, allow_pickle=True)
+
+        data_buckets = list(cache["data_buckets"])
+        label_buckets = list(cache["label_buckets"])
+
+        # stored as object arrays; convert each bucket to python list
+        data_buckets = [list(b) for b in data_buckets]
+        label_buckets = [list(b) for b in label_buckets]
+
+        vocab = list(cache["vocab"])
+        bucket_min_seq_len = int(cache["bucket_min_seq_len"])
+        return data_buckets, label_buckets, vocab, bucket_min_seq_len
+
+    tokenizer = build_or_load_tinychat_tokenizer(
+        tokenizer_path=tokenizer_path,
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+    )
+
+    ds = load_dataset("starhopp3r/TinyChat", split="train")
+
+    # We'll bucket by seq_len AFTER shift: seq_len = len(ids) - 1
+    # min original len is 2 => min shifted len is 1
+    bucket_min_seq_len = max(1, min_len - 1)
+
+    # Use a dict for buckets so we don't need to know max length up front
+    data_dict = {}   # seq_len -> list of arrays
+    label_dict = {}  # seq_len -> list of arrays
+
+    for ex in ds:
+        text = ex.get("text", "")
+        if not text or not text.strip():
+            continue
+
+        ids = tokenize_tinychat(text, tokenizer)
+
+        # Need at least 2 tokens for next-token prediction
+        if len(ids) < 2:
+            continue
+
+        # apply length filters in ORIGINAL length space if requested
+        if len(ids) < min_len:
+            continue
+        if max_len is not None and len(ids) > max_len:
+            continue
+
+        arr = np.asarray(ids, dtype=np.int32)
+        x = arr[:-1]
+        y = arr[1:]
+        seq_len = x.shape[0]  # == len(ids) - 1
+
+        data_dict.setdefault(seq_len, []).append(x)
+        label_dict.setdefault(seq_len, []).append(y)
+
+    # Convert dict -> contiguous list of buckets from min..max
+    if data_dict:
+        max_seq_len = max(data_dict.keys())
+    else:
+        max_seq_len = bucket_min_seq_len  # empty dataset edge-case
+
+    data_buckets = []
+    label_buckets = []
+    for L in range(bucket_min_seq_len, max_seq_len + 1):
+        data_buckets.append(data_dict.get(L, []))
+        label_buckets.append(label_dict.get(L, []))
+
+    # Build id->token vocab list
+    token_to_id = tokenizer.get_vocab()  # dict token -> id
+    vocab_size_actual = tokenizer.get_vocab_size()
+    vocab = [""] * vocab_size_actual
+    for tok, idx in token_to_id.items():
+        vocab[int(idx)] = tok
+
+    np.savez_compressed(
+        cache_path,
+        data_buckets=np.array(data_buckets, dtype=object),
+        label_buckets=np.array(label_buckets, dtype=object),
+        vocab=np.array(vocab, dtype=object),
+        bucket_min_seq_len=np.array(bucket_min_seq_len, dtype=np.int32),
+    )
+
+    return data_buckets, label_buckets, vocab, bucket_min_seq_len
+
+
 # def load_tinychat_topk(max_vocab: int = 2500, cache_path: str = "tinychat_topk_indices_2500.npz"):
 #     # Fast path: load cached
 #     if os.path.exists(cache_path):
@@ -161,14 +257,6 @@ def load_tinychat(
 #     return data, labels, vocab
 
 
-def accuracy(prediction, label):
-    num_correct = 0
-    for i in range(len(prediction)):
-        num_correct += np.argmax(prediction[i]) == np.argmax(label[i])
-
-    return num_correct / len(prediction)
-
-
 def to_one_hot(indices, vocab_size):
     y = np.zeros((len(indices), vocab_size), dtype=np.float32)
     y[np.arange(len(indices)), indices] = 1
@@ -178,13 +266,13 @@ def to_one_hot(indices, vocab_size):
 def create_block(d_model, d_feed_forward, heads, dropout_percent):
     return (
         layers.ResidualBlock(
-            layers.TimeDistributedLayerNorm(),
+            layers.LayerNorm(),
             layers.Attention(int(d_model / heads), int(d_model / heads), heads, mask=model_functions.causal_mask),
             layers.TimeDistributedDense(d_model),
             layers.Dropout(dropout_percent),
         ),
         layers.ResidualBlock(
-            layers.TimeDistributedLayerNorm(),
+            layers.LayerNorm(),
             layers.TimeDistributedDense(d_feed_forward, model_functions.gelu),
             layers.TimeDistributedDense(d_model),
             layers.Dropout(dropout_percent),
@@ -202,17 +290,40 @@ def safe_remove(path: str):
         print(f"[cleanup] Failed to delete {path}: {e}")
 
 
+def accuracy(prediction, label):
+    return np.sum((np.argmax(prediction, axis=-1) == np.argmax(label, axis=-1))) / prediction.shape[1]
+
+
+def lr_percent_cosine_step(step, total_steps=65000*4, warmup_steps=2000, min_percent=0.05):
+    if total_steps <= 1:
+        return 1.0
+
+    step = max(0, min(int(step), total_steps - 1))
+    warmup_steps = max(0, min(int(warmup_steps), total_steps - 1))
+
+    if warmup_steps > 0 and step < warmup_steps:
+        return step / warmup_steps  # 0 -> (almost) 1
+
+    denom = total_steps - warmup_steps
+    if denom <= 1:
+        return 1.0
+
+    t = (step - warmup_steps) / denom
+    cosine = 0.5 * (1.0 + math.cos(math.pi * t))
+    return min_percent + (1.0 - min_percent) * cosine
+
+
 def main():
     epochs = 1
-    learning_rate = 0.005
+    learning_rate = 0.01
 
     # data, labels, vocab = load_tinychat_topk()
 
-    d_model = 384
+    d_model = 64 # 384
     feed_forward_dimension = 4 * d_model
-    heads = 6
+    heads = 2 # 6
     dropout_percent = 0.1
-    blocks = 10
+    blocks = 4 # 10
 
     vocab = tinychat_vocab
 
@@ -224,37 +335,67 @@ def main():
     print(f"Vocab Size: {vocab_size}")
     print(f"Data Size: {len(data)}")
 
-    # language_model = Model(
-    #     model_functions.softmax_cross_entropy,
-    #     (-1,),
-    #     [
-    #         layers.Embedding(d_model, vocab_size),
-    #         layers.PositionalEncoder(),
-    #
-    #         *[
-    #             layer
-    #             for _ in range(blocks)
-    #             for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
-    #         ],
-    #
-    #         layers.TimeDistributedLayerNorm(),
-    #
-    #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_softmax),
-    #     ],
-    #     accuracy_function=accuracy,
-    # )
-    language_model = Model.load("Models/tinychat_v5_250000")
+    language_model = Model(
+        model_functions.vectorized_softmax_cross_entropy,
+        (-1,),
+        [
+            layers.Embedding(d_model, vocab_size),
+            layers.PositionalEncoder(),
+
+            *[
+                layer
+                for _ in range(blocks)
+                for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
+            ],
+
+            layers.LayerNorm(),
+
+            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax),
+        ],
+        optimizer=optimizers.Adam,
+        optimizer_args=(0.9, 0.999),
+        accuracy_function=accuracy,
+    )
+    # language_model = Model.load("Models/tinychat_v5_250000")
 
     print(f"Param num: {language_model.get_param_num()}")
 
+    seed = 4321
+
+    rng = np.random.default_rng(seed)
+
+    batched_data = []
+    batched_labels = []
+
+    batch_size = 16
+
+    for i in range(len(data)):
+        if len(data[i]) == 0 or len(data[i][0]) < 90 or len(data[i][0]) > 240:
+            continue
+
+        idx = rng.permutation(len(data[i]))
+        data[i] = np.array(data[i])[idx]
+        labels[i] = np.array(labels[i])[idx]
+        batched_data.extend(np.array_split(data[i], (len(data[i]) + batch_size - 1) // batch_size))
+        batched_labels.extend(np.array_split(labels[i], (len(labels[i]) + batch_size - 1) // batch_size))
+
+    print(f"Number of batches: {len(batched_data)}")
+
+    r_rng = random.Random(seed)
+    idx = list(range(len(batched_data)))
+    r_rng.shuffle(idx)
+
+    batched_data = [batched_data[i] for i in idx]
+    batched_labels = [batched_labels[i] for i in idx]
+
     blocks_to_save = 5
     cur_save_num = 0
-    train_size = 2000
-    start = 250000
+    train_size = 200
+    start = 0
     while start < len(data):
         end = min(start + train_size, len(data))
-        language_model.fit([np.array(data[i]) for i in range(start, end)], [np.array(to_one_hot(labels[i], vocab_size)) for i in range(start, end)], epochs, learning_rate)
-        print(f"Finished training on conversations {start} to {end}")
+        language_model.fit(batched_data[start:end], [np.array([to_one_hot(c, vocab_size) for c in b]) for b in batched_labels[start:end]], epochs, learning_rate, is_pre_batched=True, batch_size=batch_size)
+        print(f"Finished training on batches {start} to {end}")
         start += train_size
         cur_save_num += 1
         model_name = f"Models/tinychat_v5_{end}.pkl"
@@ -267,7 +408,8 @@ def main():
 
 
 tinychat_tokenizer = build_or_load_tinychat_tokenizer()
-tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat()
+# tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat()
+tinychat_data, tinychat_labels, tinychat_vocab, min_len = load_tinychat_bucketed()
 print("Loaded tinychat!")
 from scratch_model import *
 import numpy as np

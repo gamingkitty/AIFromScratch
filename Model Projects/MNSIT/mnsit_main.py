@@ -35,47 +35,48 @@ def main():
     #     ]
     # )
     ai_model = Model(
-        model_functions.cross_entropy,
+        model_functions.softmax_cross_entropy,
         (1, 28, 28),
         [
-            layers.Convolution(32, (3, 3), model_functions.relu),
-            layers.MaxPooling((2, 2), 2),
-
-            layers.Convolution(64, (3, 3), model_functions.relu),
+            # layers.Reshape((28, 28)),
+            # layers.Attention(32, 32, 4),
+            # layers.TimeDistributedDense(64, model_functions.relu),
+            # layers.Dropout(0.1),
+            # layers.LayerNorm(),
+            layers.Flatten(),
+            # layers.Convolution(32, (3, 3), model_functions.relu),
             # layers.MaxPooling((2, 2), 2),
-            layers.Dense(128, model_functions.relu),
+            #
+            # layers.Convolution(64, (3, 3), model_functions.relu),
+            # layers.MaxPooling((2, 2), 2),
+            # layers.Dense(128, model_functions.relu),
+            # layers.LayerNorm(),
             layers.Dense(64, model_functions.relu),
             # layers.Dropout(0.5),
 
-            layers.Dense(10, model_functions.softmax)
-        ]
+            layers.Dense(10, model_functions.cross_entropy_softmax)
+        ],
+        optimizer=optimizers.Adam,
+        optimizer_args=(0.9, 0.999),
     )
+
+    print(ai_model.get_param_num())
 
     # accuracy = ai_model.test(test_images, ohe_test_labels)
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 10, 0.01)
+    ai_model.fit(train_images, ohe_train_labels, 25, 0.00179, 32)
 
     print()
-    # accuracy = ai_model.test(test_images, ohe_test_labels)
-    # print(f"Final model accuracy is {accuracy * 100}%")
+    loss, accuracy = ai_model.test(test_images, ohe_test_labels)
+    print(f"Final model accuracy is {accuracy * 100}% and a loss of {loss}")
     # print()
 
-    print("Saving model...")
-    ai_model.save(save_as)
-    print(f"Saved model as {save_as}.pkl")
+    # print("Saving model...")
+    # ai_model.save(save_as)
+    # print(f"Saved model as {save_as}.pkl")
 
 
 if __name__ == "__main__":
-    # main()
-    t = 10
-    e = 6
-
-    d_model = 32
-
-    positional_encodings = np.zeros((t, e))
-    positional_encodings[:, 0::2] = np.sin(np.outer(np.arange(t), np.power(10000, -(2 / d_model) * np.arange(np.ceil(e / 2)))))
-    positional_encodings[:, 1::2] = np.cos(np.outer(np.arange(t), np.power(10000, -(2 / d_model) * np.arange(np.floor(e / 2)))))
-    print(positional_encodings)
-    # print(np.arange(t)[1::2])
+    main()

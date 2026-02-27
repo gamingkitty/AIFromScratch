@@ -2,6 +2,7 @@ import numpy as np
 # import cupy as cp
 import re
 import os
+from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
 
 SPECIAL_TOKENS = ["[INST]", "[/INST]", "[UNK]"]
@@ -112,8 +113,7 @@ def accuracy(prediction, label):
 
 
 def sample_with_temperature(probs, temperature=1.0):
-    probs = np.asarray(probs, dtype=np.float32)
-    probs = probs / probs.sum()
+    probs /= probs.sum()
 
     if temperature <= 0:
         return int(np.argmax(probs).item())
@@ -123,7 +123,6 @@ def sample_with_temperature(probs, temperature=1.0):
     exp_scaled = np.exp(scaled - np.max(scaled))
     new_probs = exp_scaled / exp_scaled.sum()
 
-    # cupy requires `size`
     idx = np.random.choice(len(probs), size=1, p=new_probs)
     return int(idx.item())
 
@@ -151,7 +150,7 @@ def main():
         while num < 50:
             prediction = language_model.predict(np.array(chat_history))[-1]
             # Can't be <unk> or [inst] so set probability to 0 (can be [/inst] though to end)
-            prediction[1] = 0
+            # prediction[1] = 0
             next_token = sample_with_temperature(prediction, temperature=0.7)
 
             token_string = vocab[next_token]
@@ -159,8 +158,10 @@ def main():
                 break
 
             ai_response.append(next_token)
-
             chat_history.append(next_token)
+
+            if token_string == "Ġ":
+                break
 
             num += 1
 

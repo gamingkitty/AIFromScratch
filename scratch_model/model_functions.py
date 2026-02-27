@@ -43,20 +43,20 @@ def tanh_derivative(x):
 
 
 def f_softmax(x):
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum()
+    e_xs = np.exp(x - np.max(x, axis=1, keepdims=True))
+    return e_xs / np.sum(e_xs, axis=1, keepdims=True)
 
 
 # Jacobian like [[z_0 -> a_0, z_1 -> a_0],
 #                [z_0 -> a_1, z_1 -> a_1]]
 def softmax_derivative(x):
-    softmax_vals = softmax(x)
+    softmax_vals = softmax_vectorized(x)
+    n, m = softmax_vals.shape
+    idx = np.arange(m)
+    diagonals = np.zeros((n, m, m), dtype=softmax_vals.dtype)
+    diagonals[:, idx, idx] = softmax_vals
 
-    softmax_outer = np.outer(softmax_vals, softmax_vals)
-
-    diagonal_softmax = np.diag(softmax_vals)
-
-    return diagonal_softmax - softmax_outer
+    return diagonals - (softmax_vals[:, :, np.newaxis] * softmax_vals[:, np.newaxis, :])
 
 
 def f_linear(x):
@@ -68,18 +68,25 @@ def f_derivative(x):
 
 
 def softmax_vectorized(x):
-    e_xs = np.exp(x - np.max(x, axis=1, keepdims=True))
-    return e_xs / np.sum(e_xs, axis=1, keepdims=True)
+    e_xs = np.exp(x - np.max(x, axis=2, keepdims=True))
+    return e_xs / np.sum(e_xs, axis=2, keepdims=True)
 
 
 def softmax_vectorized_derivative(x):
     softmax_vals = softmax_vectorized(x)
-    n, m = softmax_vals.shape
+    b, n, m = softmax_vals.shape
     idx = np.arange(m)
-    diagonals = np.zeros((n, m, m), dtype=softmax_vals.dtype)
-    diagonals[:, idx, idx] = softmax_vals
+    diagonals = np.zeros((b, n, m, m), dtype=softmax_vals.dtype)
+    diagonals[:, :, idx, idx] = softmax_vals
 
-    return diagonals - (softmax_vals[:, :, np.newaxis] * softmax_vals[:, np.newaxis, :])
+    # h, n, m = attention_scores.shape
+    # idx = np.arange(m)
+    # diagonals = np.zeros((h, n, m, m), dtype=attention_scores.dtype)
+    # diagonals[:, :, idx, idx] = attention_scores
+    #
+    # dattention_draw = diagonals - (attention_scores[:, :, :, np.newaxis] * attention_scores[:, :, np.newaxis, :])
+
+    return diagonals - (softmax_vals[:, :, :, np.newaxis] * softmax_vals[:, :, np.newaxis, :])
 
 
 def f_gelu(x):
@@ -98,45 +105,52 @@ def gelu_derivative(x):
 
 
 def mse_loss(output, expected):
-    return np.sum(np.power(expected - output, 2)) / output.shape[0]
+    return np.sum(np.power(expected - output, 2)) / output.shape[1]
 
 
 def mse_loss_derivative(output, expected):
-    return -(2 / output.shape[0]) * (expected - output)
+    return -(2 / output.shape[1]) * (expected - output)
+
+def vectorized_cross_entropy_loss(output, expected):
+    output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
+
+    # 1 is the time dimension
+    loss = -np.sum(expected * np.log(output_clipped)) / output_clipped.shape[1]
+    return loss
+
+def vectorized_softmax_cross_entropy_derivative(output, expected):
+    return (output - expected) / output.shape[1]
 
 
 def cross_entropy_loss(output, expected):
     output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
 
-    loss = -np.sum(expected * np.log(output_clipped)) / output_clipped.shape[0]
+    loss = -np.sum(expected * np.log(output_clipped))
     return loss
 
-
-def cross_entropy_loss_derivative(output, expected):
-    output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
-
-    gradient = (-expected / output_clipped) / output_clipped.shape[0]
-    return gradient
-
-
-def softmax_cross_entropy_derivative(output, expected):
-    return (output - expected) / output.shape[0]
+def softmax_cross_entropy_loss_derivative(output, expected):
+    return output - expected
 
 
 # Activation functions
 relu = Activation(f_relu, relu_derivative)
 tanh = Activation(f_tanh, tanh_derivative)
+
 softmax = Activation(f_softmax, softmax_derivative, False)
 vectorized_softmax = Activation(softmax_vectorized, softmax_vectorized_derivative, False)
+
 linear = Activation(f_linear, f_derivative)
-vectorized_cross_softmax = Activation(softmax_vectorized, f_derivative)
 gelu = Activation(f_gelu, gelu_derivative)
 
 # Loss functions
 mse = Loss(mse_loss, mse_loss_derivative)
-cross_entropy = Loss(cross_entropy_loss, cross_entropy_loss_derivative)
-softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_derivative)
+
+cross_entropy_softmax = Activation(f_softmax, f_derivative)
+vectorized_cross_entropy_softmax = Activation(softmax_vectorized, f_derivative)
+softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_loss_derivative)
+vectorized_softmax_cross_entropy = Loss(vectorized_cross_entropy_loss, vectorized_softmax_cross_entropy_derivative)
 
 
 def causal_mask(t):
     return np.tril(np.ones((t, t), dtype=bool))
+

@@ -38,8 +38,8 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
 
     learning_rates = [lr_percent_cosine_step(s) * 0.0003 for s in df["step"]]
 
-    axes[0].plot(df["step"][0:4000], df["loss"][0:4000], label="loss")
-    axes[0].plot(df["step"][0:4000], df["ema_loss"][0:4000], label=f"ema_loss (span={ema_span})")
+    axes[0].plot(df["step"], df["loss"], label="loss")
+    axes[0].plot(df["step"], df["ema_loss"], label=f"ema_loss (span={ema_span})")
     axes[0].set_xlabel("step")
     axes[0].set_ylabel("loss")
     axes[0].set_title("Loss vs Step")
@@ -58,7 +58,7 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
     axes[2].legend()
 
     # Plot smooth rate; optionally also plot raw lightly for reference
-    axes[3].plot(df["step"][5:4000], df["ema_loss_rate_smooth"][5:4000], label=f"d(ema_loss)/d(step)")
+    axes[3].plot(df["step"], df["ema_loss_rate_smooth"], label=f"d(ema_loss)/d(step)")
     axes[3].axhline(0.0, linewidth=1)
     axes[3].set_xlabel("step")
     axes[3].set_ylabel("ema loss / step")
@@ -70,4 +70,4 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
 
 
 if __name__ == "__main__":
-    plot_training_csv("tinychat_untied_low_lr_test_data.csv", ema_span=50, rate_ema_span=100)
+    plot_training_csv("tinychat_tinychat_tied_0005lr_0001wd_data.csv", ema_span=50, rate_ema_span=100)

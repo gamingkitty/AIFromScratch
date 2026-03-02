@@ -1,0 +1,10 @@
+numpy
+keras
+tensorflow
+pandas
+matplotlib
+scipy
+pygame
+datasets
+tokenizers
+cupy

@@ -1265,3 +1265,19 @@ class EmbeddingTiedOutput:
 
     def get_norm(self):
         return np.sum(self.bias_gradient * self.bias_gradient)
+
+
+# class Convolution2:
+#     def __init__(self, kernel_num, kernel_shape, activation_function):
+#         self.kernel_num = kernel_num
+#         self.kernel_shape = kernel_shape
+#         self.activation_function = activation_function
+#
+#         self.kernels = None
+#         self.biases = None
+#
+#     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+#         self.channel_kernel_shape = (previous_layer_output_shape[0], *self.kernel_shape)
+#         in_num = previous
+#         self.kernels =
+

@@ -132,7 +132,7 @@ def main():
 
     print(vocab)
 
-    language_model = Model.load("Models/tinychat_v8_13600.pkl")
+    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_9600.pkl")
 
     print(f"Model param num: {language_model.get_param_num()}")
 

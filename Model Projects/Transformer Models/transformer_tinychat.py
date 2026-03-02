@@ -330,7 +330,7 @@ def lr_percent_cosine_step(step, total_steps=62538*2, warmup_steps=2000, min_per
 
 
 def main():
-    learning_rate = 0.0003
+    learning_rate = 0.0005
 
     # data, labels, vocab = load_tinychat_topk()
 
@@ -346,31 +346,31 @@ def main():
 
     print(f"Vocab Size: {vocab_size}")
 
-    # language_model = Model(
-    #     model_functions.vectorized_softmax_cross_entropy,
-    #     (-1,),
-    #     [
-    #         layers.Embedding(d_model, vocab_size),
-    #         layers.PositionalEncoder(),
-    #
-    #         *[
-    #             layer
-    #             for _ in range(blocks)
-    #             for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
-    #         ],
-    #
-    #         layers.LayerNorm(),
-    #
-    #         # layers.EmbeddingTiedOutput(vocab_size, model_functions.vectorized_cross_entropy_softmax),
-    #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax)
-    #     ],
-    #     optimizer=optimizers.AdamW,
-    #     optimizer_args=(0.9, 0.999, 0.0)  # 0.0002
-    # )
+    language_model = Model(
+        model_functions.vectorized_softmax_cross_entropy,
+        (-1,),
+        [
+            layers.Embedding(d_model, vocab_size),
+            layers.PositionalEncoder(),
 
-    language_model = Model.load("Models/tinychat_untied_low_lr_test_1600.pkl")
+            *[
+                layer
+                for _ in range(blocks)
+                for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
+            ],
 
-    # language_model.layers[-1].set_from_embedding(language_model.layers[0])
+            layers.LayerNorm(),
+
+            layers.EmbeddingTiedOutput(vocab_size, model_functions.vectorized_cross_entropy_softmax),
+            # layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax)
+        ],
+        optimizer=optimizers.AdamW,
+        optimizer_args=(0.9, 0.999, 0.0001)  # 0.0002
+    )
+
+    # language_model = Model.load("Models/tinychat_untied_low_lr_test_1600.pkl")
+
+    language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     print(f"Param num: {language_model.get_param_num()}")
 
@@ -379,14 +379,14 @@ def main():
 
     print(f"Number of batches: {len(batched_data)}")
 
-    version = "untied_low_lr_test"
+    version = "tinychat_tied_0005lr_0001wd"
 
     csv_path = f"tinychat_{version}_data.csv"
 
     blocks_to_save = 20
     cur_save_num = 0
     train_size = 20
-    start = 1200
+    start = 0
     while start < len(batched_data):
         t0 = time.perf_counter()
         end = min(start + train_size, len(batched_data))

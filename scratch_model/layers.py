@@ -3,6 +3,7 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 from numpy.lib.stride_tricks import sliding_window_view
 import time
+from scratch_model import optimizers
 
 
 attention_time = 0
@@ -72,12 +73,15 @@ class Dense:
         self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype)
         self.gradient = np.zeros_like(self.weights)
         self.weight_optimizer = optimizer(*optimizer_args)
-        self.weight_optimizer.initialize(self.weights.shape, dtype=dtype)
+        self.weight_optimizer.initialize(self.weights, dtype=dtype)
 
         self.biases = np.zeros(out_num)
         self.bias_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases.shape, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+
+        if optimizer is optimizers.AdamW:
+            self.bias_optimizer.weight_decay = 0
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -106,9 +110,9 @@ class Dense:
         dc_da = np.dot(dc_dz, self.weights.T)
         return dc_da
 
-    def update_weights(self, learning_rate):
-        self.weights += self.weight_optimizer.get_weight_update(self.gradient, learning_rate)
-        self.biases += self.bias_optimizer.get_weight_update(self.bias_gradient, learning_rate)
+    def update_weights(self, learning_rate, grad_scale=1):
+        self.weight_optimizer.update_weights(self.gradient * grad_scale, learning_rate)
+        self.bias_optimizer.update_weights(self.bias_gradient * grad_scale, learning_rate)
 
         self.gradient.fill(0.0)
         self.bias_gradient.fill(0.0)
@@ -118,6 +122,9 @@ class Dense:
 
     def count_params(self):
         return np.prod(self.weights.shape) + np.prod(self.biases.shape)
+
+    def get_norm(self):
+        return np.sum(self.gradient * self.gradient) + np.sum(self.bias_gradient * self.bias_gradient)
 
 
 class Convolution:
@@ -236,6 +243,9 @@ class Convolution:
     def count_params(self):
         return np.prod(self.kernels.shape) + np.prod(self.biases.shape)
 
+    def get_norm(self):
+        return np.sum(self.gradient * self.gradient) + np.sum(self.bias_gradient * self.bias_gradient)
+
 
 # Very slow currently
 class MaxPooling:
@@ -297,13 +307,16 @@ class MaxPooling:
 
         return new_dc_da
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.output_shape
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -324,9 +337,12 @@ class Embedding:
         self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.vocab_size, self.neuron_num)).astype(dtype)
         self.gradient = np.zeros_like(self.weights)
         self.weights_optimizer = optimizer(*optimizer_args)
-        self.weights_optimizer.initialize(self.weights.shape, dtype=dtype)
+        self.weights_optimizer.initialize(self.weights, dtype=dtype)
 
         self.output_shape = (*previous_layer_output_shape, self.neuron_num)
+
+        if optimizer is optimizers.AdamW:
+            self.weights_optimizer.weight_decay = 0
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -348,8 +364,8 @@ class Embedding:
         # return dc_da
         return None
 
-    def update_weights(self, learning_rate):
-        self.weights += self.weights_optimizer.get_weight_update(self.gradient, learning_rate)
+    def update_weights(self, learning_rate, grad_scale=1):
+        self.weights_optimizer.update_weights(self.gradient * grad_scale, learning_rate)
         self.gradient.fill(0.0)
 
     def get_output_shape(self):
@@ -357,6 +373,9 @@ class Embedding:
 
     def count_params(self):
         return np.prod(self.weights.shape)
+
+    def get_norm(self):
+        return np.sum(self.gradient * self.gradient)
 
 
 # Change so that doesnt store self.dz_da
@@ -398,13 +417,16 @@ class Dropout:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return dc_da * this_layer_z * self.scale
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.input_shape
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -440,12 +462,12 @@ class Recurrent:
         self.hidden_weights = np.random.uniform(-weight_limit, weight_limit, size=(out_num, out_num))
         self.hidden_gradient = np.zeros_like(self.hidden_weights)
         self.hidden_optimizer = optimizer(*optimizer_args)
-        self.hidden_optimizer.initialize(self.hidden_weights.shape, dtype=dtype)
+        self.hidden_optimizer.initialize(self.hidden_weights, dtype=dtype)
 
         self.input_weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num))
         self.input_gradient = np.zeros_like(self.input_weights)
         self.input_optimizer = optimizer(*optimizer_args)
-        self.input_optimizer.initialize(self.input_shape, dtype=dtype)
+        self.input_optimizer.initialize(self.input_weights, dtype=dtype)
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -541,9 +563,9 @@ class Recurrent:
 
         return new_dc_da
 
-    def update_weights(self, learning_rate):
-        self.input_weights += self.input_optimizer(self.input_gradient, learning_rate)
-        self.hidden_weights += self.hidden_optimizer(self.hidden_gradient, learning_rate)
+    def update_weights(self, learning_rate, grad_scale):
+        self.input_optimizer.update_weights(self.input_gradient * grad_scale, learning_rate)
+        self.hidden_optimizer.update_weights(self.hidden_gradient * grad_scale, learning_rate)
 
         self.input_gradient.fill(0.0)
         self.hidden_gradient.fill(0.0)
@@ -553,6 +575,9 @@ class Recurrent:
 
     def count_params(self):
         return np.prod(self.input_weights.shape) + np.prod(self.hidden_weights.shape)
+
+    def get_norm(self):
+        return np.sum(self.input_gradient * self.input_gradient) + np.sum(self.hidden_gradient * self.hidden_gradient)
 
 
 class Loop:
@@ -607,9 +632,9 @@ class Loop:
 
         return np.array(new_dc_da_list)
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         for layer in self.layers:
-            layer.update_weights(learning_rate)
+            layer.update_weights(learning_rate, grad_scale=grad_scale)
 
     def get_output_shape(self):
         return self.output_shape
@@ -619,6 +644,9 @@ class Loop:
         for layer in self.layers:
             param_num += layer.count_params()
         return param_num
+
+    def get_norm(self):
+        return sum(layer.get_norm() for layer in self.layers)
 
 
 class Stack:
@@ -640,17 +668,19 @@ class Stack:
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         dc_da = dc_da.reshape(self.output_shape)
-        new_dc_da = np.array([np.sum(np.fliplr(dc_da).diagonal(offset).T, axis=0).T
-                              for offset in range(-dc_da.shape[0] + 1, dc_da.shape[1] - self.stack_size + 1)][::-1])
+        new_dc_da = np.array([np.sum(np.fliplr(dc_da).diagonal(offset).T, axis=0).T for offset in range(-dc_da.shape[0] + 1, dc_da.shape[1] - self.stack_size + 1)][::-1])
         return new_dc_da
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.output_shape
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -698,9 +728,9 @@ class Attention:
         self.key_optimizer = optimizer(*optimizer_args)
         self.query_optimizer = optimizer(*optimizer_args)
         self.value_optimizer = optimizer(*optimizer_args)
-        self.key_optimizer.initialize(self.key_weights.shape, dtype=dtype)
-        self.query_optimizer.initialize(self.query_weights.shape, dtype=dtype)
-        self.value_optimizer.initialize(self.value_weights.shape, dtype=dtype)
+        self.key_optimizer.initialize(self.key_weights, dtype=dtype)
+        self.query_optimizer.initialize(self.query_weights, dtype=dtype)
+        self.value_optimizer.initialize(self.value_weights, dtype=dtype)
 
     def predict(self, prev_layer_activation):
         z, a = self.forward_pass(prev_layer_activation)
@@ -785,10 +815,10 @@ class Attention:
         # attention_time += time.perf_counter() - t0
         return new_dc_da
 
-    def update_weights(self, learning_rate):
-        self.value_weights -= learning_rate * self.value_gradient
-        self.query_weights -= learning_rate * self.query_gradient
-        self.key_weights -= learning_rate * self.key_gradient
+    def update_weights(self, learning_rate, grad_scale):
+        self.value_optimizer.update_weights(self.value_gradient * grad_scale, learning_rate)
+        self.query_optimizer.update_weights(self.query_gradient * grad_scale, learning_rate)
+        self.key_optimizer.update_weights(self.key_gradient * grad_scale, learning_rate)
 
         self.value_gradient.fill(0.0)
         self.query_gradient.fill(0.0)
@@ -799,6 +829,9 @@ class Attention:
 
     def count_params(self):
         return np.prod(self.value_weights.shape) + np.prod(self.query_weights.shape) + np.prod(self.key_weights.shape)
+
+    def get_norm(self):
+        return np.sum(self.value_gradient * self.value_gradient) + np.sum(self.query_gradient * self.query_gradient) + np.sum(self.value_gradient * self.value_gradient)
 
 
 # Must take in vectorized activation function
@@ -829,12 +862,15 @@ class TimeDistributedDense:
         self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype)
         self.gradient = np.zeros_like(self.weights)
         self.weight_optimizer = optimizer(*optimizer_args)
-        self.weight_optimizer.initialize(self.weights.shape, dtype=dtype)
+        self.weight_optimizer.initialize(self.weights, dtype=dtype)
 
-        self.biases = np.zeros(out_num)
+        self.biases = np.zeros(out_num, dtype=dtype)
         self.bias_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases.shape, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+
+        if optimizer is optimizers.AdamW:
+            self.bias_optimizer.weight_decay = 0
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -869,9 +905,9 @@ class TimeDistributedDense:
         # dense_time += time.perf_counter() - t0
         return dc_da
 
-    def update_weights(self, learning_rate):
-        self.weights += self.weight_optimizer.get_weight_update(self.gradient, learning_rate)
-        self.biases += self.bias_optimizer.get_weight_update(self.bias_gradient, learning_rate)
+    def update_weights(self, learning_rate, grad_scale=1):
+        self.weight_optimizer.update_weights(self.gradient * grad_scale, learning_rate)
+        self.bias_optimizer.update_weights(self.bias_gradient * grad_scale, learning_rate)
 
         self.gradient.fill(0.0)
         self.bias_gradient.fill(0.0)
@@ -881,6 +917,9 @@ class TimeDistributedDense:
 
     def count_params(self):
         return np.prod(self.weights.shape) + np.prod(self.biases.shape)
+
+    def get_norm(self):
+        return np.sum(self.gradient * self.gradient) + np.sum(self.bias_gradient * self.bias_gradient)
 
 
 class Sum:
@@ -899,13 +938,16 @@ class Sum:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return np.tile(dc_da, (len(prev_layer_a), 1))
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.output_shape
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -927,13 +969,16 @@ class Flatten:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return np.reshape(dc_da, self.input_shape)
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.output_size,
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -954,13 +999,16 @@ class Reshape:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return np.reshape(dc_da, (-1, *self.input_shape))
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
         return self.output_shape
 
     def count_params(self):
+        return 0
+
+    def get_norm(self):
         return 0
 
 
@@ -1004,9 +1052,9 @@ class ResidualBlock:
             current_dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], current_dc_da)
         return current_dc_da + dc_da
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         for layer in self.layers:
-            layer.update_weights(learning_rate)
+            layer.update_weights(learning_rate, grad_scale=grad_scale)
 
     def get_output_shape(self):
         return self.output_shape
@@ -1016,6 +1064,9 @@ class ResidualBlock:
         for layer in self.layers:
             param_num += layer.count_params()
         return param_num
+
+    def get_norm(self):
+        return sum(layer.get_norm() for layer in self.layers)
 
 
 class LayerNorm:
@@ -1036,12 +1087,16 @@ class LayerNorm:
         self.weights = np.ones(in_num, dtype=dtype)
         self.weights_gradient = np.zeros_like(self.weights)
         self.weights_optimizer = optimizer(*optimizer_args)
-        self.weights_optimizer.initialize(self.weights.shape, dtype=dtype)
+        self.weights_optimizer.initialize(self.weights, dtype=dtype)
 
         self.biases = np.zeros(in_num, dtype=dtype)
         self.biases_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases.shape, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+
+        if optimizer is optimizers.AdamW:
+            self.weights_optimizer.weight_decay = 0
+            self.bias_optimizer.weight_decay = 0
 
     def predict(self, prev_layer_activation):
         z, a = self.forward_pass(prev_layer_activation)
@@ -1078,9 +1133,9 @@ class LayerNorm:
         # layer_norm_time += time.perf_counter() - t0
         return new_dc_da
 
-    def update_weights(self, learning_rate):
-        self.weights += self.weights_optimizer.get_weight_update(self.weights_gradient, learning_rate)
-        self.biases += self.bias_optimizer.get_weight_update(self.biases_gradient, learning_rate)
+    def update_weights(self, learning_rate, grad_scale=1):
+        self.weights_optimizer.update_weights(self.weights_gradient * grad_scale, learning_rate)
+        self.bias_optimizer.update_weights(self.biases_gradient * grad_scale, learning_rate)
 
         self.weights_gradient.fill(0.0)
         self.biases_gradient.fill(0.0)
@@ -1090,6 +1145,9 @@ class LayerNorm:
 
     def count_params(self):
         return np.prod(self.weights.shape) + np.prod(self.biases.shape)
+
+    def get_norm(self):
+        return np.sum(self.weights_gradient * self.weights_gradient) + np.sum(self.biases_gradient * self.biases_gradient)
 
 
 class PositionalEncoder:
@@ -1119,7 +1177,7 @@ class PositionalEncoder:
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return dc_da
 
-    def update_weights(self, learning_rate):
+    def update_weights(self, learning_rate, grad_scale=1):
         pass
 
     def get_output_shape(self):
@@ -1127,3 +1185,83 @@ class PositionalEncoder:
 
     def count_params(self):
         return 0
+
+    def get_norm(self):
+        return 0
+
+
+class EmbeddingTiedOutput:
+    def __init__(self, vocab_size, activation_function=None):
+        self.neuron_num = vocab_size
+        self.activation_function = activation_function
+        self.weights = None
+        self.embedding_gradient = None
+
+        self.biases = None
+        self.bias_gradient = None
+        self.bias_optimizer = None
+
+        self.output_shape = None
+
+        self.has_activation = self.activation_function is not None
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        self.output_shape = (previous_layer_output_shape[0], self.neuron_num)
+
+        self.biases = np.zeros(self.neuron_num, dtype=dtype)
+        self.bias_gradient = np.zeros_like(self.biases)
+        self.bias_optimizer = optimizer(*optimizer_args)
+        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+
+        if optimizer is optimizers.AdamW:
+            self.bias_optimizer.weight_decay = 0
+
+    def set_from_embedding(self, embedding_layer):
+        self.weights = embedding_layer.weights.T
+        self.embedding_gradient = embedding_layer.gradient
+
+    def predict(self, prev_layer_activation):
+        z_data, a_data = self.forward_pass(prev_layer_activation)
+        return a_data
+
+    def forward_pass(self, prev_layer_activation):
+        # global dense_time
+        # t0 = time.perf_counter()
+        z_data = np.dot(prev_layer_activation, self.weights)
+        z_data += self.biases
+        if self.has_activation:
+            a_data = self.activation_function(z_data)
+        else:
+            a_data = z_data
+
+        # dense_time += time.perf_counter() - t0
+        return z_data, a_data
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        # global dense_time
+        # t0 = time.perf_counter()
+        if not self.has_activation:
+            dc_dz = dc_da
+        elif self.activation_function.is_elementwise:
+            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+        else:
+            dc_dz = np.einsum('bti,btio->bto', dc_da, self.activation_function.derivative(this_layer_z))
+        self.embedding_gradient += np.einsum('bti,bto->oi', prev_layer_a, dc_dz)
+        self.bias_gradient += np.sum(dc_dz, axis=(0, 1))
+
+        dc_da = np.dot(dc_dz, self.weights.T)
+        # dense_time += time.perf_counter() - t0
+        return dc_da
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        self.bias_optimizer.update_weights(self.bias_gradient * grad_scale, learning_rate)
+        self.bias_gradient.fill(0.0)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return np.prod(self.biases.shape)
+
+    def get_norm(self):
+        return np.sum(self.bias_gradient * self.bias_gradient)

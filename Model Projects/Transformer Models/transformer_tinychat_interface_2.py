@@ -132,13 +132,19 @@ def main():
 
     print(vocab)
 
-    language_model = Model.load("Models/tinychat_v5_450000")
+    language_model = Model.load("Models/tinychat_v8_13600.pkl")
 
     print(f"Model param num: {language_model.get_param_num()}")
 
     chat_history = []
     while True:
-        user_prompt = "[INST] " + input("> ") + " [/INST]"
+        inp = input("> ")
+        if inp.lower() == "c":
+            chat_history = []
+            print("\nCleared chat history!\n")
+            continue
+
+        user_prompt = "[INST] " + inp + " [/INST]"
         input_tokens = tokenize_tinychat(user_prompt, tokenizer)
 
         print([vocab[t] for t in input_tokens])
@@ -148,7 +154,7 @@ def main():
         ai_response = []
         num = 0
         while num < 50:
-            prediction = language_model.predict(np.array(chat_history))[-1]
+            prediction = language_model.predict(np.array([chat_history]))[0][-1]
             # Can't be <unk> or [inst] so set probability to 0 (can be [/inst] though to end)
             # prediction[1] = 0
             next_token = sample_with_temperature(prediction, temperature=0.7)

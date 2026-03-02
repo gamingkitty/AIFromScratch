@@ -1,10 +1,11 @@
 import numpy as np
 
 
-class Adam:
-    def __init__(self, b1=0.9, b2=0.999):
+class AdamW:
+    def __init__(self, b1=0.9, b2=0.999, weight_decay=0.01):
         self.b1 = b1
         self.b2 = b2
+        self.weight_decay = weight_decay
 
         self.b1_pow = 1
         self.b2_pow = 1
@@ -14,16 +15,25 @@ class Adam:
         self.m = None
         self.v = None
 
+        self.weights = None
+
         self.epsilon = 1e-8
 
-    def initialize(self, gradient_shape, dtype=np.float32):
-        self.m = np.zeros(gradient_shape, dtype=dtype)
-        self.v = np.zeros(gradient_shape, dtype=dtype)
-        self.gradient_square = np.zeros(gradient_shape, dtype=dtype)
+        self.clip = 1
+
+    def initialize(self, weights, dtype=np.float32):
+        self.m = np.zeros(weights.shape, dtype=dtype)
+        self.v = np.zeros(weights.shape, dtype=dtype)
+        self.gradient_square = np.zeros(weights.shape, dtype=dtype)
+        self.weights = weights
         self.b1_pow = 1
         self.b2_pow = 1
 
-    def get_weight_update(self, gradient, learning_rate):
+    def update_weights(self, gradient, learning_rate):
+        g_norm = np.linalg.norm(gradient)
+        if g_norm > self.clip:
+            gradient = gradient * (self.clip / (g_norm + 1e-12))
+
         self.m *= self.b1
         self.m += (1.0 - self.b1) * gradient
 
@@ -36,7 +46,8 @@ class Adam:
 
         m_hat = self.m / (1 - self.b1_pow)
         v_hat = self.v / (1 - self.b2_pow)
-        return -learning_rate * (m_hat / (np.sqrt(v_hat) + self.epsilon))
+        self.weights *= 1 - learning_rate * self.weight_decay
+        self.weights -= learning_rate * (m_hat / (np.sqrt(v_hat) + self.epsilon))
 
 
 class GradientDescent:

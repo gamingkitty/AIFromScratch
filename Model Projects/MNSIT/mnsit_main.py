@@ -51,7 +51,8 @@ def main():
             # layers.MaxPooling((2, 2), 2),
             # layers.Dense(128, model_functions.relu),
             # layers.LayerNorm(),
-            layers.Dense(64, model_functions.relu),
+            layers.Dense(512, model_functions.relu),
+            layers.Dense(256, model_functions.relu),
             # layers.Dropout(0.5),
 
             layers.Dense(10, model_functions.cross_entropy_softmax)
@@ -66,7 +67,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 25, 0.00179, 32)
+    ai_model.fit(train_images, ohe_train_labels, 25, 0.001, 128)
 
     print()
     loss, accuracy = ai_model.test(test_images, ohe_test_labels)

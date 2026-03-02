@@ -280,21 +280,37 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
     )
 
 
-def safe_remove(path: str):
-    try:
-        os.remove(path)
-        print(f"[cleanup] Deleted {path}")
-    except FileNotFoundError:
-        print(f"[cleanup] Not found (skip): {path}")
-    except Exception as e:
-        print(f"[cleanup] Failed to delete {path}: {e}")
+def batch_data_from_buckets(data, labels, batch_size=32, seed=4321):
+    batched_data = []
+    batched_labels = []
+
+    rng = np.random.default_rng(seed)
+
+    for i in range(len(data)):
+        if len(data[i]) == 0 or len(data[i][0]) < 90 or len(data[i][0]) > 240:
+            continue
+
+        idx = rng.permutation(len(data[i]))
+        data[i] = np.array(data[i])[idx]
+        labels[i] = np.array(labels[i])[idx]
+        batched_data.extend(np.array_split(data[i], (len(data[i]) + batch_size - 1) // batch_size))
+        batched_labels.extend(np.array_split(labels[i], (len(labels[i]) + batch_size - 1) // batch_size))
+
+    r_rng = random.Random(seed)
+    idx = list(range(len(batched_data)))
+    r_rng.shuffle(idx)
+
+    batched_data = [batched_data[i] for i in idx]
+    batched_labels = [batched_labels[i] for i in idx]
+
+    return batched_data, batched_labels
 
 
 def accuracy(prediction, label):
     return np.sum((np.argmax(prediction, axis=-1) == np.argmax(label, axis=-1))) / prediction.shape[1]
 
 
-def lr_percent_cosine_step(step, total_steps=65000*4, warmup_steps=2000, min_percent=0.05):
+def lr_percent_cosine_step(step, total_steps=62538*2, warmup_steps=2000, min_percent=0.05):
     if total_steps <= 1:
         return 1.0
 
@@ -314,102 +330,100 @@ def lr_percent_cosine_step(step, total_steps=65000*4, warmup_steps=2000, min_per
 
 
 def main():
-    epochs = 1
-    learning_rate = 0.01
+    learning_rate = 0.0003
 
     # data, labels, vocab = load_tinychat_topk()
 
-    d_model = 64 # 384
+    d_model = 384
     feed_forward_dimension = 4 * d_model
-    heads = 2 # 6
+    heads = 8
     dropout_percent = 0.1
-    blocks = 4 # 10
+    blocks = 12
 
     vocab = tinychat_vocab
 
     vocab_size = len(vocab)
 
-    data = tinychat_data
-    labels = tinychat_labels
-
     print(f"Vocab Size: {vocab_size}")
-    print(f"Data Size: {len(data)}")
 
-    language_model = Model(
-        model_functions.vectorized_softmax_cross_entropy,
-        (-1,),
-        [
-            layers.Embedding(d_model, vocab_size),
-            layers.PositionalEncoder(),
+    # language_model = Model(
+    #     model_functions.vectorized_softmax_cross_entropy,
+    #     (-1,),
+    #     [
+    #         layers.Embedding(d_model, vocab_size),
+    #         layers.PositionalEncoder(),
+    #
+    #         *[
+    #             layer
+    #             for _ in range(blocks)
+    #             for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
+    #         ],
+    #
+    #         layers.LayerNorm(),
+    #
+    #         # layers.EmbeddingTiedOutput(vocab_size, model_functions.vectorized_cross_entropy_softmax),
+    #         layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax)
+    #     ],
+    #     optimizer=optimizers.AdamW,
+    #     optimizer_args=(0.9, 0.999, 0.0)  # 0.0002
+    # )
 
-            *[
-                layer
-                for _ in range(blocks)
-                for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
-            ],
+    language_model = Model.load("Models/tinychat_untied_low_lr_test_1600.pkl")
 
-            layers.LayerNorm(),
-
-            layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax),
-        ],
-        optimizer=optimizers.Adam,
-        optimizer_args=(0.9, 0.999),
-        accuracy_function=accuracy,
-    )
-    # language_model = Model.load("Models/tinychat_v5_250000")
+    # language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     print(f"Param num: {language_model.get_param_num()}")
 
-    seed = 4321
-
-    rng = np.random.default_rng(seed)
-
-    batched_data = []
-    batched_labels = []
-
-    batch_size = 16
-
-    for i in range(len(data)):
-        if len(data[i]) == 0 or len(data[i][0]) < 90 or len(data[i][0]) > 240:
-            continue
-
-        idx = rng.permutation(len(data[i]))
-        data[i] = np.array(data[i])[idx]
-        labels[i] = np.array(labels[i])[idx]
-        batched_data.extend(np.array_split(data[i], (len(data[i]) + batch_size - 1) // batch_size))
-        batched_labels.extend(np.array_split(labels[i], (len(labels[i]) + batch_size - 1) // batch_size))
+    batched_data = tinychat_batched_data
+    batched_labels = tinychat_batched_labels
 
     print(f"Number of batches: {len(batched_data)}")
 
-    r_rng = random.Random(seed)
-    idx = list(range(len(batched_data)))
-    r_rng.shuffle(idx)
+    version = "untied_low_lr_test"
 
-    batched_data = [batched_data[i] for i in idx]
-    batched_labels = [batched_labels[i] for i in idx]
+    csv_path = f"tinychat_{version}_data.csv"
 
-    blocks_to_save = 5
+    blocks_to_save = 20
     cur_save_num = 0
-    train_size = 200
-    start = 0
-    while start < len(data):
-        end = min(start + train_size, len(data))
-        language_model.fit(batched_data[start:end], [np.array([to_one_hot(c, vocab_size) for c in b]) for b in batched_labels[start:end]], epochs, learning_rate, is_pre_batched=True, batch_size=batch_size)
-        print(f"Finished training on batches {start} to {end}")
+    train_size = 20
+    start = 1200
+    while start < len(batched_data):
+        t0 = time.perf_counter()
+        end = min(start + train_size, len(batched_data))
+
+        language_model.fit(
+            batched_data[start:end],
+            [np.array([to_one_hot(c, vocab_size) for c in b]) for b in batched_labels[start:end]],
+            1,
+            learning_rate,
+            is_pre_batched=True,
+            batch_size=batch_size,
+            accuracy_function=accuracy,
+            shuffle_data=False,
+            learning_rate_function=lr_percent_cosine_step,
+            start_step=start
+        )
+
+        print(f"Finished training on batches {start} to {end}, taking {time.perf_counter() - t0:.4f} seconds.")
+        language_model.save_csv(csv_path)
+
         start += train_size
         cur_save_num += 1
-        model_name = f"Models/tinychat_v5_{end}.pkl"
+        model_name = f"Models/tinychat_{version}_{end}.pkl"
         if cur_save_num >= blocks_to_save:
             print(f"Saving model to {model_name}")
             language_model.save(model_name)
             cur_save_num = 0
 
-    language_model.save(f"Models/tinychat_v5_1000000")
+    language_model.save(f"Models/tinychat_{version}_e1")
 
+
+batch_size = 16
 
 tinychat_tokenizer = build_or_load_tinychat_tokenizer()
 # tinychat_data, tinychat_labels, tinychat_vocab = load_tinychat()
 tinychat_data, tinychat_labels, tinychat_vocab, min_len = load_tinychat_bucketed()
+tinychat_batched_data, tinychat_batched_labels = batch_data_from_buckets(tinychat_data, tinychat_labels, batch_size=batch_size)
 print("Loaded tinychat!")
 from scratch_model import *
 import numpy as np

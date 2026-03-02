@@ -1,18 +1,24 @@
+import time
+
 import numpy as np
 import pickle
 import random
 from scratch_model import layers
 from scratch_model import optimizers
 import pandas as pd
+import os
+
 
 def default_accuracy(prediction, label):
     return np.sum((np.argmax(prediction, axis=-1) == np.argmax(label, axis=-1)))
 
+
 def default_learning_rate(step):
     return 1
 
+
 class Model:
-    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.Adam, optimizer_args=()):
+    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.AdamW, optimizer_args=()):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
@@ -29,6 +35,12 @@ class Model:
 
         self.output_shape = prev_output_shape
         self.output_num = np.prod(prev_output_shape)
+
+        self.steps = []
+        self.loss_data = []
+        self.accuracy_data = []
+
+        self.clip = 1
 
     def predict(self, input_data):
         prediction = input_data
@@ -59,7 +71,20 @@ class Model:
             dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], dc_da)
         self.final_dc_da = dc_da
 
-    def fit(self, data, labels, epochs, learning_rate, batch_size=1, is_pre_batched=False, shuffle_data=True, console_updates=True, accuracy_function=default_accuracy, learning_rate_function=default_learning_rate):
+    def fit(
+        self,
+        data,
+        labels,
+        epochs,
+        learning_rate,
+        batch_size=1,
+        is_pre_batched=False,
+        shuffle_data=True,
+        console_updates=True,
+        accuracy_function=default_accuracy,
+        learning_rate_function=default_learning_rate,
+        start_step=0,
+    ):
         if console_updates:
             print("Training model...")
 
@@ -72,8 +97,8 @@ class Model:
                 data, labels = map(list, zip(*combined))
 
             if not is_pre_batched:
-                data_batches = np.array_split(data, (len(data) + batch_size - 1) // batch_size)
-                label_batches = np.array_split(labels, (len(labels) + batch_size - 1) // batch_size)
+                data_batches = np.array_split(np.array(data), (len(data) + batch_size - 1) // batch_size)
+                label_batches = np.array_split(np.array(labels), (len(labels) + batch_size - 1) // batch_size)
             else:
                 data_batches = data
                 label_batches = labels
@@ -81,23 +106,41 @@ class Model:
             total_loss = 0
             total_correct = 0
             total_examples = 0
+            last_time = time.perf_counter()
             for j in range(len(data_batches)):
                 current_batch = data_batches[j]
                 current_label_batch = label_batches[j]
                 batch_len = len(current_batch)
 
                 z_data, a_data = self.forward_propagate(current_batch)
-                total_loss += self.loss(a_data[-1], current_label_batch)
-                total_correct += accuracy_function(a_data[-1], current_label_batch)
+                cur_loss = self.loss(a_data[-1], current_label_batch)
+                cur_correct = accuracy_function(a_data[-1], current_label_batch)
+                self.loss_data.append(cur_loss / batch_len)
+                self.accuracy_data.append(cur_correct / batch_len)
+                self.steps.append(j + start_step)
+                total_loss += cur_loss
+                total_correct += cur_correct
+
                 self.backwards_propagate(z_data, a_data, current_label_batch)
 
+                norm_sqr = 0
                 for layer in self.layers:
-                    layer.update_weights(learning_rate * learning_rate_function(i * data_size + j))
+                    norm_sqr += layer.get_norm()
+
+                norm = np.sqrt(norm_sqr)
+                scale = 1
+                if norm > self.clip:
+                    scale = (self.clip / norm)
+
+                for layer in self.layers:
+                    layer.update_weights(learning_rate * learning_rate_function(i * data_size + j + start_step), grad_scale=scale)
 
                 total_examples += batch_len
 
-                if (j + 1) % 500 == 0 and console_updates:
-                    print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy.")
+                # if (j + 1) % 1 == 0 and console_updates:
+                #     t = time.perf_counter()
+                #     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
+                #     last_time = t
                     # print(f"Attention Time: {layers.attention_time}")
                     # print(f"Dense Time: {layers.dense_time}")
                     # print(f"Norm Time: {layers.layer_norm_time}")
@@ -105,7 +148,7 @@ class Model:
                     # print(f"Dropout Time: {layers.dropout_time}")
 
             if console_updates:
-                print(f"Finished epoch {i + 1} with an average loss of {(total_loss / data_size):.6f} and {(100 * (total_correct / data_size)):.4f}% accuracy.")
+                print(f"Finished epoch {i + 1} with an average loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy.")
         if console_updates:
             print("Finished training model.")
 
@@ -153,3 +196,27 @@ class Model:
         path = filename if filename.endswith(".pkl") else filename + ".pkl"
         with open(path, "rb") as file:
             return pickle.load(file)
+
+    def save_csv(self, path):
+        cur_df = pd.DataFrame({
+            "step": self.steps,
+            "loss": self.loss_data,
+            "accuracy": self.accuracy_data,
+        })
+
+        if os.path.exists(path):
+            file_df = pd.read_csv(path)
+            # merge; current overrides duplicates by step
+            merged = pd.concat([file_df, cur_df], ignore_index=True)
+            merged = merged.drop_duplicates(subset=["step"], keep="last")
+        else:
+            merged = cur_df
+
+        merged = merged.sort_values("step").reset_index(drop=True)
+
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        merged.to_csv(path, index=False)
+
+        self.steps = merged["step"].astype(int).tolist()
+        self.loss_data = merged["loss"].tolist()
+        self.accuracy_data = merged["accuracy"].tolist()

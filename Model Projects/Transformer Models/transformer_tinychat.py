@@ -280,7 +280,7 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
     )
 
 
-def batch_data_from_buckets(data, labels, batch_size=32, seed=4321):
+def batch_data_from_buckets(data, labels, batch_size=16, seed=4321):
     batched_data = []
     batched_labels = []
 

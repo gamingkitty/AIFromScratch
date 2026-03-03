@@ -710,6 +710,9 @@ class Attention:
 
         self.scale = 1 / np.sqrt(self.query_key_size)
 
+        self.key_cache = []
+        self.value_cache = []
+
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
         in_num = previous_layer_output_shape[1]
 
@@ -733,6 +736,11 @@ class Attention:
         self.query_optimizer.initialize(self.query_weights, dtype=dtype)
         self.value_optimizer.initialize(self.value_weights, dtype=dtype)
 
+    def predict_cache(self, new_token):
+        query = np.einsum('bti,hiv->bhtv', new_token, self.query_weights)
+        key = np.einsum('bti,hiv->bhtv', new_token, self.key_weights)
+        value = np.einsum('bti,hiv->bhtv', new_token, self.value_weights)
+
     def predict(self, prev_layer_activation):
         z, a = self.forward_pass(prev_layer_activation)
         return a
@@ -742,7 +750,7 @@ class Attention:
         # t0 = time.perf_counter()
         t = prev_layer_activation.shape[1]
 
-        # Shape (time, head, query/key/value size)
+        # Shape (head, time, query/key/value size)
         queries = np.einsum('bti,hiv->bhtv', prev_layer_activation, self.query_weights)
         keys = np.einsum('bti,hiv->bhtv', prev_layer_activation, self.key_weights)
         values = np.einsum('bti,hiv->bhtv', prev_layer_activation, self.value_weights)

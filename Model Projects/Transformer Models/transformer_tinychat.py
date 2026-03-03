@@ -346,6 +346,8 @@ def main():
 
     print(f"Vocab Size: {vocab_size}")
 
+    # print([vocab[t] for t in tinychat_batched_data[0][0]])
+
     # language_model = Model(
     #     model_functions.vectorized_softmax_cross_entropy,
     #     (-1,),

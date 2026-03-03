@@ -1,4 +1,6 @@
 import pandas as pd
+import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import math
 import numpy as np
@@ -31,15 +33,14 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
     # Raw slope of EMA loss vs step
     df["ema_loss_rate"] = np.gradient(df["ema_loss"].to_numpy(), df["step"].to_numpy())
 
-    # Smooth the slope (this is the key)
-    df["ema_loss_rate_smooth"] = (df["ema_loss_rate"].ewm(span=rate_ema_span, adjust=False).mean()).ewm(span=rate_ema_span, adjust=False).mean()
+    print(f"Mean loss rate in past 100 steps: {df['ema_loss_rate'][-1000:-1].mean()}")
 
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
 
-    learning_rates = [lr_percent_cosine_step(s) * 0.0003 for s in df["step"]]
+    learning_rates = [lr_percent_cosine_step(s) * 0.0005 for s in df["step"]]
 
-    axes[0].plot(df["step"][0:4000], df["loss"][0:4000], label="loss")
-    axes[0].plot(df["step"][0:4000], df["ema_loss"][0:4000], label=f"ema_loss (span={ema_span})")
+    # axes[0].plot(df["step"], df["loss"], label="loss")
+    axes[0].plot(df["step"], df["ema_loss"], label=f"ema_loss (span={ema_span})")
     axes[0].set_xlabel("step")
     axes[0].set_ylabel("loss")
     axes[0].set_title("Loss vs Step")
@@ -57,17 +58,9 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
     axes[2].set_title("Learning Rate vs Step")
     axes[2].legend()
 
-    # Plot smooth rate; optionally also plot raw lightly for reference
-    axes[3].plot(df["step"][5:4000], df["ema_loss_rate_smooth"][5:4000], label=f"d(ema_loss)/d(step)")
-    axes[3].axhline(0.0, linewidth=1)
-    axes[3].set_xlabel("step")
-    axes[3].set_ylabel("ema loss / step")
-    axes[3].set_title("EMA Loss Rate vs Step")
-    axes[3].legend()
-
     fig.tight_layout()
     plt.show()
 
 
 if __name__ == "__main__":
-    plot_training_csv("tinychat_untied_low_lr_test_data.csv", ema_span=50, rate_ema_span=100)
+    plot_training_csv("tinychat_tinychat_tied_0005lr_0001wd_data.csv", ema_span=100)

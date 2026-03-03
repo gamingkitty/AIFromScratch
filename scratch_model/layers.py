@@ -595,6 +595,7 @@ class Loop:
             previous_layer_output_shape = layer.get_output_shape()
         self.output_shape = (loop_num, *self.layers[-1].get_output_shape())
 
+    # Fix in future for dropout
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
         return a_data
@@ -1027,8 +1028,10 @@ class ResidualBlock:
             raise ValueError("Input and output shape mismatch! Projection not yet implemented.")
 
     def predict(self, prev_layer_activation):
-        z_data, a_data = self.forward_pass(prev_layer_activation)
-        return a_data
+        last_layer_out = prev_layer_activation
+        for layer in self.layers:
+            last_layer_out = layer.predict(last_layer_out)
+        return last_layer_out + prev_layer_activation
 
     def forward_pass(self, prev_layer_activation):
         z_data = []

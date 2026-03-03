@@ -346,29 +346,29 @@ def main():
 
     print(f"Vocab Size: {vocab_size}")
 
-    language_model = Model(
-        model_functions.vectorized_softmax_cross_entropy,
-        (-1,),
-        [
-            layers.Embedding(d_model, vocab_size),
-            layers.PositionalEncoder(),
+    # language_model = Model(
+    #     model_functions.vectorized_softmax_cross_entropy,
+    #     (-1,),
+    #     [
+    #         layers.Embedding(d_model, vocab_size),
+    #         layers.PositionalEncoder(),
+    #
+    #         *[
+    #             layer
+    #             for _ in range(blocks)
+    #             for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
+    #         ],
+    #
+    #         layers.LayerNorm(),
+    #
+    #         layers.EmbeddingTiedOutput(vocab_size, model_functions.vectorized_cross_entropy_softmax),
+    #         # layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax)
+    #     ],
+    #     optimizer=optimizers.AdamW,
+    #     optimizer_args=(0.9, 0.999, 0.0001)  # 0.0002
+    # )
 
-            *[
-                layer
-                for _ in range(blocks)
-                for layer in create_block(d_model, feed_forward_dimension, heads, dropout_percent)
-            ],
-
-            layers.LayerNorm(),
-
-            layers.EmbeddingTiedOutput(vocab_size, model_functions.vectorized_cross_entropy_softmax),
-            # layers.TimeDistributedDense(vocab_size, model_functions.vectorized_cross_entropy_softmax)
-        ],
-        optimizer=optimizers.AdamW,
-        optimizer_args=(0.9, 0.999, 0.0001)  # 0.0002
-    )
-
-    # language_model = Model.load("Models/tinychat_untied_low_lr_test_1600.pkl")
+    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_20800.pkl")
 
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
@@ -386,7 +386,7 @@ def main():
     blocks_to_save = 20
     cur_save_num = 0
     train_size = 20
-    start = 0
+    start = 20800
     while start < len(batched_data):
         t0 = time.perf_counter()
         end = min(start + train_size, len(batched_data))

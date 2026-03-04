@@ -741,6 +741,9 @@ class Attention:
         key = np.einsum('bti,hiv->bhtv', new_token, self.key_weights)
         value = np.einsum('bti,hiv->bhtv', new_token, self.value_weights)
 
+        self.key_cache.append(key)
+        self.value_cache.append(value)
+
     def predict(self, prev_layer_activation):
         z, a = self.forward_pass(prev_layer_activation)
         return a

@@ -242,7 +242,7 @@ def main():
 
             next_token = sample_with_temperature(
                 prediction,
-                temperature=0.7,
+                temperature=0.0,
                 repetition_penalty=1.15,
                 recent_tokens=chat_history[-64:],
                 top_p=0.9,

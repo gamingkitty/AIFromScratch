@@ -713,6 +713,8 @@ class Attention:
         self.key_cache = []
         self.value_cache = []
 
+        self.use_kv_cache = True
+
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
         in_num = previous_layer_output_shape[1]
 
@@ -736,15 +738,40 @@ class Attention:
         self.query_optimizer.initialize(self.query_weights, dtype=dtype)
         self.value_optimizer.initialize(self.value_weights, dtype=dtype)
 
+    def clear_cache(self):
+        self.key_cache = []
+        self.value_cache = []
+
     def predict_cache(self, new_token):
+        # Dim (b, h, t, v/q/k), t will only be length 1 (as only 1 new token per predict)
         query = np.einsum('bti,hiv->bhtv', new_token, self.query_weights)
         key = np.einsum('bti,hiv->bhtv', new_token, self.key_weights)
         value = np.einsum('bti,hiv->bhtv', new_token, self.value_weights)
 
-        self.key_cache.append(key)
-        self.value_cache.append(value)
+        self.key_cache += [key[:, :, ti, :] for ti in range(key.shape[2])]
+        self.value_cache += [value[:, :, ti, :] for ti in range(value.shape[2])]
+
+        # Only compute for one token
+        query = query[:, :, 0][:, :, np.newaxis]
+
+        # Dim (b, h, t, v/q/k)
+        k_cache = np.stack(self.key_cache, axis=0).transpose((1, 2, 0, 3))
+        v_cache = np.stack(self.value_cache, axis=0).transpose((1, 2, 0, 3))
+
+        raw_new_token_attention_scores = np.einsum('bhtv,bhsv->bhts', query, k_cache) * self.scale
+
+        e_xs = np.exp(raw_new_token_attention_scores - np.max(raw_new_token_attention_scores, axis=-1, keepdims=True))
+        new_token_attention_scores = e_xs / np.sum(e_xs, axis=-1, keepdims=True)
+
+        # Dim (b, h, 1, v), 1 for time dimension
+        output = np.einsum('bhts,bhsv->bhtv', new_token_attention_scores, v_cache)
+        output = output.transpose(0, 2, 1, 3).reshape(output.shape[0], output.shape[2], -1)
+        return output
 
     def predict(self, prev_layer_activation):
+        if self.use_kv_cache:
+            return self.predict_cache(prev_layer_activation)
+
         z, a = self.forward_pass(prev_layer_activation)
         return a
 
@@ -1167,23 +1194,28 @@ class LayerNorm:
 class PositionalEncoder:
     def __init__(self):
         self.output_shape = None
+        self.pos = 0
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
         self.output_shape = previous_layer_output_shape
 
+    def clear_cache(self):
+        self.pos = 0
+
     def predict(self, prev_layer_activation):
-        z, a = self.forward_pass(prev_layer_activation)
+        z, a = self.forward_pass(prev_layer_activation, self.pos)
+        self.pos += 1
         return a
 
-    def forward_pass(self, prev_layer_activation):
+    def forward_pass(self, prev_layer_activation, p=0):
         # global positional_time
         # t0 = time.perf_counter()
         t = prev_layer_activation.shape[1]
         e = prev_layer_activation.shape[2]
 
         positional_encodings = np.zeros(prev_layer_activation.shape)
-        positional_encodings[:, :, 0::2] = np.sin(np.outer(np.arange(t), np.power(10000, -(2 / e) * np.arange((e + 1) // 2))))
-        positional_encodings[:, :, 1::2] = np.cos(np.outer(np.arange(t), np.power(10000, -(2 / e) * np.arange(e // 2))))
+        positional_encodings[:, :, 0::2] = np.sin(np.outer(np.arange(p, t + p), np.power(10000, -(2 / e) * np.arange((e + 1) // 2))))
+        positional_encodings[:, :, 1::2] = np.cos(np.outer(np.arange(p, t + p), np.power(10000, -(2 / e) * np.arange(e // 2))))
 
         # positional_time += time.perf_counter() - t0
         return None, prev_layer_activation + positional_encodings

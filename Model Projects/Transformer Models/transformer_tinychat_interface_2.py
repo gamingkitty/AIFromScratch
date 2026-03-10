@@ -124,7 +124,7 @@ def sample_with_temperature(
     if temperature is not None and temperature <= 0:
         return int(np.argmax(new_probs))
 
-    return int(np.random.choice(len(new_probs), p=new_probs))
+    return int(np.random.choice(len(new_probs), p=new_probs, size=1))
 
 
 def main():
@@ -132,19 +132,19 @@ def main():
 
     print(vocab)
 
-    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_e1.pkl")
+    language_model = Model.load("Models/tinychat_tied_0005lr_0001wd_e2.pkl")
 
     # Temp code to support old models
-    for i in range(len(language_model.layers)):
-        if type(language_model.layers[i]) is layers.ResidualBlock:
-            layers_to_check = language_model.layers[i].layers
-            for j in range(len(layers_to_check)):
-                if type(layers_to_check[j]) is layers.Attention:
-                    layers_to_check[j].key_cache = []
-                    layers_to_check[j].value_cache = []
-                    layers_to_check[j].use_kv_cache = True
-        if type(language_model.layers[i]) is layers.PositionalEncoder:
-            language_model.layers[i].pos = 0
+    # for i in range(len(language_model.layers)):
+    #     if type(language_model.layers[i]) is layers.ResidualBlock:
+    #         layers_to_check = language_model.layers[i].layers
+    #         for j in range(len(layers_to_check)):
+    #             if type(layers_to_check[j]) is layers.Attention:
+    #                 layers_to_check[j].key_cache = []
+    #                 layers_to_check[j].value_cache = []
+    #                 layers_to_check[j].use_kv_cache = True
+    #     if type(language_model.layers[i]) is layers.PositionalEncoder:
+    #         language_model.layers[i].pos = 0
 
     print(f"Model param num: {language_model.get_param_num()}")
 
@@ -172,9 +172,11 @@ def main():
         for i in range(len(input_tokens) - 1):
             t = input_tokens[i]
             # Add extra dimensions for batch and time.
-            inp_prediction = language_model.predict(np.array([[t]]))
+            inp_prediction = language_model.predict(np.array([[t]]))[0][-1]
+            # print(inp_prediction)
+            # print(np.argmax(inp_prediction))
             if i < len(input_tokens) - 3:
-                token_string = vocab[np.argmax(inp_prediction)]
+                token_string = vocab[int(np.argmax(inp_prediction))]
                 print(token_string.replace('Ġ', ' '), end="")
         print()
 
@@ -185,7 +187,7 @@ def main():
 
             next_token = sample_with_temperature(
                 prediction,
-                temperature=0.0,
+                temperature=0.7,
                 repetition_penalty=1.15,
                 recent_tokens=chat_history[-64:],
                 top_p=0.95,

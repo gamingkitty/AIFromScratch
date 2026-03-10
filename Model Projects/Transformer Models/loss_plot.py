@@ -33,13 +33,13 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
     # Raw slope of EMA loss vs step
     df["ema_loss_rate"] = np.gradient(df["ema_loss"].to_numpy(), df["step"].to_numpy())
 
-    print(f"Mean loss rate in past 2000 steps: {df['ema_loss_rate'][-2000:-1].mean()}")
+    print(f"Mean loss rate in past 2000 steps: {df['ema_loss_rate'][-10000:-1].mean()}")
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 4))
 
     learning_rates = [lr_percent_cosine_step(s) * 0.0005 for s in df["step"]]
 
-    # axes[0].plot(df["step"], df["loss"], label="loss")
+    axes[0].plot(df["step"], df["loss"], label="loss")
     axes[0].plot(df["step"], df["ema_loss"], label=f"ema_loss (span={ema_span})")
     axes[0].set_xlabel("step")
     axes[0].set_ylabel("loss")

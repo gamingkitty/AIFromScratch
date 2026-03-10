@@ -280,7 +280,7 @@ def create_block(d_model, d_feed_forward, heads, dropout_percent):
     )
 
 
-def batch_data_from_buckets(data, labels, batch_size=16, seed=4321):
+def batch_data_from_buckets(data, labels, batch_size=16, seed=1234):
     batched_data = []
     batched_labels = []
 
@@ -370,7 +370,7 @@ def main():
     #     optimizer_args=(0.9, 0.999, 0.0001)  # 0.0002
     # )
 
-    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_20800.pkl")
+    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_e2.pkl")
 
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
@@ -388,7 +388,7 @@ def main():
     blocks_to_save = 20
     cur_save_num = 0
     train_size = 20
-    start = 20800
+    start = 14000
     while start < len(batched_data):
         t0 = time.perf_counter()
         end = min(start + train_size, len(batched_data))
@@ -403,7 +403,7 @@ def main():
             accuracy_function=accuracy,
             shuffle_data=False,
             learning_rate_function=lr_percent_cosine_step,
-            start_step=start
+            start_step=start + 62538
         )
 
         print(f"Finished training on batches {start} to {end}, taking {time.perf_counter() - t0:.4f} seconds.")
@@ -411,13 +411,18 @@ def main():
 
         start += train_size
         cur_save_num += 1
-        model_name = f"Models/tinychat_{version}_{end}.pkl"
+        model_name = f"Models/tinychat_e1_{version}_{end}.pkl"
         if cur_save_num >= blocks_to_save:
             print(f"Saving model to {model_name}")
             language_model.save(model_name)
             cur_save_num = 0
 
     language_model.save(f"Models/tinychat_{version}_e1")
+
+
+# Seeds used:
+# Epoch 1: 4321
+# Epoch 2: 1234
 
 
 batch_size = 16

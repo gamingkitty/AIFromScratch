@@ -29,14 +29,14 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = Model.load("C:\\Users\\brier\\PycharmProjects\\AIFromScratchFinal\\Model Projects\\Models\\cifar_conv_4.pkl")
+    ai_model = Model.load("Models/cifar_convolution")
 
     image = np.zeros((3, 32, 32))
 
     train_images, train_labels, test_images, test_labels = load_cifar10()
     current_image = 0
 
-    print(ai_model.test(test_images, test_labels))
+    # print(ai_model.test(test_images, test_labels))
 
     pygame.init()
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
@@ -86,7 +86,7 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
         pygame.draw.rect(screen, dark_gray, info_rect)
         screen.blit(info_top_text, (scale * 32 + (info_rect.width - info_top_text.get_width()) / 2, 20))
-        predictions = ai_model.predict(np.transpose(image, (0, 2, 1)))
+        predictions = ai_model.predict(np.transpose(image, (0, 2, 1))[np.newaxis])[0]
         sorted_indices = np.argsort(predictions)[::-1]
         predictions = predictions[sorted_indices]
 
@@ -95,7 +95,7 @@ def main():
             rendered_text = font.render(text, True, white)
             screen.blit(rendered_text, (scale * 32 + (info_rect.width - rendered_text.get_width()) / 2, 70 + i * 40))
 
-        rendered_text = font.render(cifar10_labels[test_labels[current_image]], True, white)
+        rendered_text = font.render(cifar10_labels[train_labels[current_image]], True, white)
         screen.blit(rendered_text, (scale * 32 + (info_rect.width - rendered_text.get_width()) / 2, 130 + len(predictions) * 40))
 
         for y in range(image.shape[1]):
@@ -118,15 +118,20 @@ def main():
                     image = np.zeros((3, 32, 32))
                 elif event.key == pygame.K_w:
                     current_image += 1
-                    image = np.transpose(test_images[current_image], (0, 2, 1))
-                    z_data, a_data = ai_model.forward_propagate(np.transpose(image, (0, 2, 1)))
-                    ai_model.backwards_propagate(z_data, a_data, np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0]), 1)
-                    image_2 = np.transpose(ai_model.final_dc_da.reshape(3, 32, 32), (0, 2, 1))
-                    image_2 = (image_2 - image_2.min()) / (image_2.max() - image_2.min())
+                    image = np.transpose(train_images[current_image], (0, 2, 1))
+                    z_data, a_data = ai_model.forward_propagate(np.transpose(image, (0, 2, 1))[np.newaxis])
+                    ai_model.backwards_propagate(z_data, a_data, np.array([train_labels[current_image]]))
+                    f_dc_da = ai_model.final_dc_da[0]
+                    image_2 = np.transpose(f_dc_da, (0, 2, 1))
+                    mins = image_2.min()
+                    maxs = image_2.max()
+                    denom = maxs - mins
+
+                    image_2 = ((image_2 - mins) / np.where(denom == 0, 1, denom))
                 elif event.key == pygame.K_s:
                     current_image -= 1
                     current_image = max(current_image, 0)
-                    image = np.transpose(test_images[current_image], (0, 2, 1))
+                    image = np.transpose(train_images[current_image], (0, 2, 1))
                 elif event.key == pygame.K_n:
                     noise = np.random.rand(3, 32, 32) - 0.5
                     noise *= 0.2

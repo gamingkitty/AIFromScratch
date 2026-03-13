@@ -177,7 +177,7 @@ class Model:
                 if len(args) == 3 and isinstance(args[0], (bytes, bytearray, memoryview)):
                     rawdata, shape, dtype_obj = args
                     dtype = np.dtype(dtype_obj)
-                    arr = np.frombuffer(rawdata, dtype=dtype)
+                    arr = np.frombuffer(rawdata, dtype=dtype).copy()
                     return arr.reshape(tuple(shape), order="C")
 
                 if len(args) == 4:

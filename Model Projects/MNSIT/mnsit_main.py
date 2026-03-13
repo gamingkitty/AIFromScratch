@@ -38,27 +38,20 @@ def main():
         model_functions.softmax_cross_entropy,
         (1, 28, 28),
         [
-            # layers.Reshape((28, 28)),
-            # layers.Attention(32, 32, 4),
-            # layers.TimeDistributedDense(64, model_functions.relu),
-            # layers.Dropout(0.1),
-            # layers.LayerNorm(),
-            layers.Flatten(),
-            # layers.Convolution(32, (3, 3), model_functions.relu),
-            # layers.MaxPooling((2, 2), 2),
-            #
-            # layers.Convolution(64, (3, 3), model_functions.relu),
+            layers.Reshape((1, 28, 28)),
+            layers.Convolution2(16, (3, 3), model_functions.relu),
             # layers.MaxPooling((2, 2), 2),
             # layers.Dense(128, model_functions.relu),
             # layers.LayerNorm(),
-            layers.Dense(512, model_functions.relu),
-            layers.Dense(256, model_functions.relu),
+            # layers.Dense(512, model_functions.relu),
+            layers.Flatten(),
+            layers.Dense(128, model_functions.relu),
             # layers.Dropout(0.5),
 
             layers.Dense(10, model_functions.cross_entropy_softmax)
         ],
-        optimizer=optimizers.Adam,
-        optimizer_args=(0.9, 0.999),
+        optimizer=optimizers.AdamW,
+        optimizer_args=(0.9, 0.999, 0.0),
     )
 
     print(ai_model.get_param_num())
@@ -67,7 +60,7 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 25, 0.001, 128)
+    ai_model.fit(train_images, ohe_train_labels, 1, 0.001, 64)
 
     print()
     loss, accuracy = ai_model.test(test_images, ohe_test_labels)

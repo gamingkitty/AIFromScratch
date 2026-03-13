@@ -88,25 +88,27 @@ def main():
     print()
 
     # embedding_model = model.Model.load("Models/embedding_test_king")
-    embedding_model = model.Model(
-        model_functions.cross_entropy,
-        (context_window - 1, vocab_size),
-        layers.Embedding(embedding_dimension, model_functions.linear),
-        layers.Dense(vocab_size, model_functions.softmax)
-    )
+    # embedding_model = model.Model(
+    #     model_functions.cross_entropy,
+    #     (context_window - 1, vocab_size),
+    #     layers.Embedding(embedding_dimension, model_functions.linear),
+    #     layers.Dense(vocab_size, model_functions.softmax)
+    # )
 
-    # embedding_weights = embedding_model.layers[0].weights
-    #
-    # word_to_index = {word: i for i, word in enumerate(vocab)}
-    #
-    # word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
-    #
-    # print(most_similar("cat", word_vectors))
-    # print(analogy("kitten", "puppy", "cat", word_vectors, 10))
+    embedding_model = model.Model.load("C:\\Users\\brier\\PycharmProjects\\AIFromScratch\\Model Projects\\Transformer Models\\Models\\tinychat_e1_tinychat_tied_0005lr_0001wd_24400.pkl")
 
-    embedding_model.fit(word_data, labels, 10, 0.01, 1)
+    embedding_weights = embedding_model.layers[0].weights
+
+    word_to_index = {word: i for i, word in enumerate(vocab)}
+
+    word_vectors = {word: embedding_weights[word_to_index[word]] for word in word_to_index}
+
+    print(most_similar("cat", word_vectors))
+    print(analogy("kitten", "puppy", "cat", word_vectors, 10))
+
+    # embedding_model.fit(word_data, labels, 10, 0.01, 1)
     #
-    embedding_model.save("Models/embedding_test_king")
+    # embedding_model.save("Models/embedding_test_king")
 
 
 if __name__ == "__main__":

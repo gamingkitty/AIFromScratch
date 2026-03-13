@@ -132,7 +132,7 @@ def main():
 
     print(vocab)
 
-    language_model = Model.load("Models/tinychat_tinychat_tied_0005lr_0001wd_e1.pkl")
+    language_model = Model.load("Models/tinychat_e1_tinychat_tied_0005lr_0001wd_24400.pkl")
 
     # Temp code to support old models
     for i in range(len(language_model.layers)):
@@ -167,6 +167,8 @@ def main():
         input_tokens = tokenize_tinychat(user_prompt, tokenizer)
 
         chat_history += input_tokens
+        #
+        print([vocab[t] for t in input_tokens])
 
         print("Input prediction:", end="")
         for i in range(len(input_tokens) - 1):
@@ -178,26 +180,45 @@ def main():
                 print(token_string.replace('Ġ', ' '), end="")
         print()
 
+        # print("[INST] ", end="")
+
         ai_response = []
         num = 0
-        while num < 50:
+        turn = 0
+        while True:
             prediction = language_model.predict(np.array([[chat_history[-1]]]))[0][-1]
 
             next_token = sample_with_temperature(
                 prediction,
-                temperature=0.0,
-                repetition_penalty=1.15,
+                temperature=0.7,
+                repetition_penalty=1.25,
                 recent_tokens=chat_history[-64:],
-                top_p=0.95,
+                top_p=0.9,
                 top_k=0,
             )
 
             token_string = vocab[next_token]
             if token_string == "[INST]" or token_string == "[/INST]":
                 break
+                # turn += 1
+                # if turn >= 10:
+                #     chat_history = [0]
+                #     for layer in language_model.layers:
+                #         if type(layer) is layers.ResidualBlock:
+                #             for l in layer.layers:
+                #                 if type(l) is layers.Attention:
+                #                     l.clear_cache()
+                #         if type(layer) is layers.PositionalEncoder:
+                #             layer.clear_cache()
+                #     print("\n\nNew Conversation Started!")
+                #     break
+                # print()
 
             if num == 0:
                 token_string = token_string.lstrip('Ġ')
+
+            if token_string == "âĢĻ":
+                token_string = "'"
 
             print(token_string.replace('Ġ', ' '), end="")
 

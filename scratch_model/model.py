@@ -137,10 +137,10 @@ class Model:
 
                 total_examples += batch_len
 
-                # if (j + 1) % 1 == 0 and console_updates:
-                #     t = time.perf_counter()
-                #     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
-                #     last_time = t
+                if (j + 1) % 1 == 0 and console_updates:
+                    t = time.perf_counter()
+                    print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
+                    last_time = t
                     # print(f"Attention Time: {layers.attention_time}")
                     # print(f"Dense Time: {layers.dense_time}")
                     # print(f"Norm Time: {layers.layer_norm_time}")

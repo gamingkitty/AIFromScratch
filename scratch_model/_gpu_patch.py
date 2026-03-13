@@ -5,7 +5,6 @@ import copyreg
 
 
 def _from_pickle(buffer: bytes, shape, dtype_str: str):
-    """Rebuild array using whichever 'numpy' is currently active (CuPy or NumPy)."""
     xp = sys.modules.get("numpy")
     arr = xp.frombuffer(memoryview(buffer), dtype=xp.dtype(dtype_str))
     return arr.reshape(shape).copy()
@@ -15,11 +14,9 @@ _from_pickle.__module__ = "numpy"
 
 
 def _register_cupy_pickling(cp):
-    # publish loader on the active numpy module
     setattr(sys.modules["numpy"], "_from_pickle", _from_pickle)
 
     def _reduce_cupy_array(arr):
-        # refer to the *importable* numpy._from_pickle, not a local function
         return sys.modules["numpy"]._from_pickle, (arr.tobytes(), arr.shape, arr.dtype.str)
 
     copyreg.pickle(cp.ndarray, _reduce_cupy_array)
@@ -44,10 +41,10 @@ def enable_gpu() -> None:
         pass
 
     if not hasattr(cp, "_NoValue") and hasattr(np_real, "_NoValue"):
-        cp._NoValue = np_real._NoValue  # type: ignore[attr-defined]
+        cp._NoValue = np_real._NoValue
 
     sys.modules["numpy"] = cp
-    # sys.modules["numpy_original"] = np_real
+    sys.modules["numpy_original"] = np_real
     _register_cupy_pickling(cp)
 
     _orig_prod, _orig_size = cp.prod, cp.size

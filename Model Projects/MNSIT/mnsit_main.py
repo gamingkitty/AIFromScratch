@@ -38,8 +38,10 @@ def main():
         model_functions.softmax_cross_entropy,
         (1, 28, 28),
         [
-            layers.Reshape((1, 28, 28)),
-            layers.Convolution2(16, (3, 3), model_functions.relu),
+            # layers.Reshape((1, 28, 28)),
+            # layers.Convolution(64, (3, 3), model_functions.relu),
+            # layers.MaxPooling((2, 2), 2),
+            # layers.Convolution(32, (3, 3), model_functions.relu),
             # layers.MaxPooling((2, 2), 2),
             # layers.Dense(128, model_functions.relu),
             # layers.LayerNorm(),
@@ -60,10 +62,10 @@ def main():
     # print(f"Initial model accuracy is {accuracy * 100}%")
     # print()
 
-    ai_model.fit(train_images, ohe_train_labels, 1, 0.001, 64)
+    ai_model.fit(train_images, ohe_train_labels, 5, 0.0025, 64)
 
     print()
-    loss, accuracy = ai_model.test(test_images, ohe_test_labels)
+    loss, accuracy = ai_model.test(np.array(test_images), ohe_test_labels)
     print(f"Final model accuracy is {accuracy * 100}% and a loss of {loss}")
     # print()
 

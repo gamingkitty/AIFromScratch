@@ -1,6 +1,6 @@
-import numpy as np
-from scratch_model import *
 from keras.datasets import cifar10
+import numpy as np
+
 
 def load_cifar10():
     (train_images, train_labels), (test_images, test_labels) = cifar10.load_data()
@@ -15,43 +15,46 @@ def load_cifar10():
 
 
 def main():
-    train_images, train_labels, test_images, test_labels = load_cifar10()
+    train_labels = np.eye(10)[tr_labels]
+    test_labels = np.eye(10)[te_labels]
 
-    train_labels = np.eye(10)[train_labels]
-    test_labels = np.eye(10)[test_labels]
-
-    # ai_model = model.Model.load("../Model Projects/Models/cifar_conv_4")
-    # ai_model = model.Model(
-    #     model_functions.cross_entropy,
+    # ai_model = Model(
+    #     model_functions.softmax_cross_entropy,
     #     (3, 32, 32),
-    #     layers.Convolution(32, (3, 3), model_functions.relu),
-    #     layers.MaxPooling((2, 2), 2),
-    #     layers.Convolution(64, (3, 3), model_functions.relu),
-    #     layers.Dense(128, model_functions.relu),
-    #     layers.Dense(64, model_functions.relu),
-    #     layers.Dense(10, model_functions.softmax),
+    #     [
+    #         layers.Convolution(64, (3, 3), model_functions.relu),
+    #         layers.MaxPooling((2, 2), 2),
+    #         layers.Convolution(64, (3, 3), model_functions.relu),
+    #
+    #         layers.Flatten(),
+    #         layers.Dense(512, model_functions.relu),
+    #         layers.Dense(256, model_functions.relu),
+    #         layers.Dense(128, model_functions.relu),
+    #
+    #         layers.Dense(10, model_functions.cross_entropy_softmax)
+    #     ],
+    #     optimizer=optimizers.AdamW,
+    #     optimizer_args=(0.9, 0.999, 0.0),
     # )
 
-    ai_model = model.Model(
-        model_functions.cross_entropy,
-        (3, 32, 32),
-        [
-            layers.Dense(128, model_functions.relu),
-            layers.Dense(64, model_functions.relu),
-            layers.Dense(10, model_functions.softmax)
-        ]
-    )
+    ai_model = Model.load("Models/cifar_convolution")
+
+    print(f"Param count: {ai_model.get_param_num()}")
 
     # accuracy = ai_model.test(test_images, test_labels)
     # print(f"Initial accuracy: {accuracy * 100:.4f}%")
 
-    ai_model.fit(train_images, train_labels, 3, 0.01, 1)
+    # ai_model.fit(tr_images, train_labels, 10, 0.0005, batch_size=64)
 
-    accuracy = ai_model.test(test_images, test_labels)
-    print(f"Final accuracy: {accuracy * 100:.4f}%")
+    # ai_model.save("Models/cifar_convolution")
 
-    ai_model.save("Models/test_cifar_dense")
+    loss, accuracy = ai_model.test(np.array(te_images), test_labels)
+    print(f"Final accuracy: {accuracy * 100:.4f}%, final loss: {loss:.6f}")
 
 
+tr_images, tr_labels, te_images, te_labels = load_cifar10()
+
+from scratch_model import *
+import numpy as np
 if __name__ == "__main__":
     main()

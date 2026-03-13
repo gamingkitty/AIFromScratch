@@ -124,7 +124,7 @@ def sample_with_temperature(
     if temperature is not None and temperature <= 0:
         return int(np.argmax(new_probs))
 
-    return int(np.random.choice(len(new_probs), p=new_probs))
+    return int(np.random.choice(len(new_probs), p=new_probs, size=1))
 
 
 def main():
@@ -132,19 +132,19 @@ def main():
 
     print(vocab)
 
-    language_model = Model.load("Models/tinychat_e1_tinychat_tied_0005lr_0001wd_24400.pkl")
+    language_model = Model.load("Models/tinychat_tied_0005lr_0001wd_e2.pkl")
 
     # Temp code to support old models
-    for i in range(len(language_model.layers)):
-        if type(language_model.layers[i]) is layers.ResidualBlock:
-            layers_to_check = language_model.layers[i].layers
-            for j in range(len(layers_to_check)):
-                if type(layers_to_check[j]) is layers.Attention:
-                    layers_to_check[j].key_cache = []
-                    layers_to_check[j].value_cache = []
-                    layers_to_check[j].use_kv_cache = True
-        if type(language_model.layers[i]) is layers.PositionalEncoder:
-            language_model.layers[i].pos = 0
+    # for i in range(len(language_model.layers)):
+    #     if type(language_model.layers[i]) is layers.ResidualBlock:
+    #         layers_to_check = language_model.layers[i].layers
+    #         for j in range(len(layers_to_check)):
+    #             if type(layers_to_check[j]) is layers.Attention:
+    #                 layers_to_check[j].key_cache = []
+    #                 layers_to_check[j].value_cache = []
+    #                 layers_to_check[j].use_kv_cache = True
+    #     if type(language_model.layers[i]) is layers.PositionalEncoder:
+    #         language_model.layers[i].pos = 0
 
     print(f"Model param num: {language_model.get_param_num()}")
 
@@ -167,58 +167,39 @@ def main():
         input_tokens = tokenize_tinychat(user_prompt, tokenizer)
 
         chat_history += input_tokens
-        #
-        print([vocab[t] for t in input_tokens])
 
         print("Input prediction:", end="")
         for i in range(len(input_tokens) - 1):
             t = input_tokens[i]
             # Add extra dimensions for batch and time.
-            inp_prediction = language_model.predict(np.array([[t]]))
+            inp_prediction = language_model.predict(np.array([[t]]))[0][-1]
+            # print(inp_prediction)
+            # print(np.argmax(inp_prediction))
             if i < len(input_tokens) - 3:
-                token_string = vocab[np.argmax(inp_prediction)]
+                token_string = vocab[int(np.argmax(inp_prediction))]
                 print(token_string.replace('Ġ', ' '), end="")
         print()
 
-        # print("[INST] ", end="")
-
         ai_response = []
         num = 0
-        turn = 0
-        while True:
+        while num < 50:
             prediction = language_model.predict(np.array([[chat_history[-1]]]))[0][-1]
 
             next_token = sample_with_temperature(
                 prediction,
                 temperature=0.7,
-                repetition_penalty=1.25,
+                repetition_penalty=1.15,
                 recent_tokens=chat_history[-64:],
-                top_p=0.9,
+                top_p=0.95,
                 top_k=0,
             )
 
             token_string = vocab[next_token]
             if token_string == "[INST]" or token_string == "[/INST]":
                 break
-                # turn += 1
-                # if turn >= 10:
-                #     chat_history = [0]
-                #     for layer in language_model.layers:
-                #         if type(layer) is layers.ResidualBlock:
-                #             for l in layer.layers:
-                #                 if type(l) is layers.Attention:
-                #                     l.clear_cache()
-                #         if type(layer) is layers.PositionalEncoder:
-                #             layer.clear_cache()
-                #     print("\n\nNew Conversation Started!")
-                #     break
-                # print()
 
             if num == 0:
                 token_string = token_string.lstrip('Ġ')
-
-            if token_string == "âĢĻ":
-                token_string = "'"
 
             print(token_string.replace('Ġ', ' '), end="")
 

@@ -113,6 +113,8 @@ class Dense:
         self.bias_gradient += np.sum(dc_dz, axis=0)
 
         dc_da = np.dot(dc_dz, self.weights.T)
+        # print(dc_da[0])
+        # print()
         return dc_da
 
     def update_weights(self, learning_rate, grad_scale=1):
@@ -133,11 +135,12 @@ class Dense:
 
 
 class Convolution:
-    def __init__(self, kernel_num, kernel_shape, activation_function):
+    def __init__(self, kernel_num, kernel_shape, activation_function, padding=0):
         self.kernel_num = kernel_num
         self.kernel_shape = kernel_shape
         self.true_kernel_shape = None
         self.activation_function = activation_function
+        self.padding = padding
 
         self.kernels = None
         self.kernels_gradient = None
@@ -152,12 +155,12 @@ class Convolution:
         self.true_kernel_shape = (previous_layer_output_shape[0], self.kernel_num, *self.kernel_shape)
         self.output_shape = (
             self.kernel_num,
-            previous_layer_output_shape[1] - self.kernel_shape[0] + 1,
-            previous_layer_output_shape[2] - self.kernel_shape[1] + 1
+            previous_layer_output_shape[1] - self.kernel_shape[0] + 1 + 2 * self.padding,
+            previous_layer_output_shape[2] - self.kernel_shape[1] + 1 + 2 * self.padding
         )
 
-        fan_in = np.prod(self.true_kernel_shape)
-        weight_limit = np.sqrt(2.0 / fan_in)
+        fan_in = np.prod(self.true_kernel_shape) / self.kernel_num
+        weight_limit = np.sqrt(6.0 / fan_in)
         self.kernels = np.random.uniform(-weight_limit, weight_limit, self.true_kernel_shape).astype(dtype)
         self.biases = np.zeros(self.kernel_num, dtype=dtype)
 
@@ -174,17 +177,25 @@ class Convolution:
         return a
 
     def forward_pass(self, prev_layer_activation):
+        padded_activation = np.pad(
+            prev_layer_activation,
+            pad_width=[(0, 0)] * (prev_layer_activation.ndim - 2) + [(self.padding, self.padding), (self.padding, self.padding)],
+            mode="constant",
+            constant_values=0
+        )
         # Gets windows in shape (b, channel, window_h, window_w, k_h, k_w) from input (b, c, h, w)
-        windows = get_windows(self.kernel_shape, prev_layer_activation)
+        windows = get_windows(self.kernel_shape, padded_activation)
 
         # Outputs b, kernel_num, window_h, window_w by multiplying k_h and k_w and summing
         z_data = np.einsum('bcijhw,ckhw->bkij', windows, self.kernels) + self.biases[np.newaxis, :, np.newaxis, np.newaxis]
         a_data = self.activation_function(z_data)
 
-        return z_data, a_data
+        return (z_data, padded_activation), a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        activation_derivative = self.activation_function.derivative(this_layer_z)
+        z_data, padded_activation = this_layer_z
+
+        activation_derivative = self.activation_function.derivative(z_data)
 
         if self.activation_function.is_elementwise:
             dc_dz = dc_da * activation_derivative
@@ -196,22 +207,32 @@ class Convolution:
 
         # Get window views of prev_layer_a where each window corresponds to one number in a kernel
         # Shape (b, c, kernel_h, kernel_w, out_h, out_w)
-        prev_layer_a_windows = get_windows(self.output_shape[1:], prev_layer_a)
+        prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation)
 
         # Possibly look into speeding this up, because it does recalculate a lot of things because of how the windows work.
         self.kernels_gradient += np.einsum('bchwij,bkij->ckhw', prev_layer_a_windows, dc_dz)
 
-        # Shape (b, c, h, w)
-        new_dc_da = np.zeros_like(prev_layer_a)
+        # Shape (b, c, in_h, in_w)
+        new_dc_da = np.zeros_like(padded_activation)
 
+        # Old code that doesn't work since adding to a window doesn't work as expected
         # Shape (b, c, out_h, out_w, k_h, k_w)
-        dc_da_windows = get_windows(self.kernel_shape, new_dc_da)
-
+        # dc_da_windows = get_windows(self.kernel_shape, new_dc_da)
         # Output shape is (b, k, out_h, out_w)
         # Kernel shape is (c, k, k_h, k_w)
-        dc_da_windows += np.einsum('bkij,ckhw->bcijhw', dc_dz, self.kernels)
+        # dc_da_windows += np.einsum('bkij,ckhw->bcijhw', dc_dz, self.kernels)
 
-        return new_dc_da
+        out_h, out_w = dc_dz.shape[2], dc_dz.shape[3]
+        k_h, k_w = self.kernel_shape
+
+        # Works although uses for loops
+        for kh in range(k_h):
+            for kw in range(k_w):
+                new_dc_da[:, :, kh:kh + out_h, kw:kw + out_w] += np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
+
+        if self.padding == 0:
+            return new_dc_da
+        return new_dc_da[..., self.padding:-self.padding, self.padding:-self.padding]
 
     def update_weights(self, learning_rate, grad_scale=1):
         self.kernel_optimizer.update_weights(self.kernels_gradient * grad_scale, learning_rate)
@@ -630,7 +651,7 @@ class Stack:
 
     def forward_pass(self, prev_layer_activation):
         padded = np.pad(prev_layer_activation, ((self.stack_size - 1, 0),) + ((0, 0),) * (prev_layer_activation.ndim - 1))
-        stacked = np.moveaxis(sliding_window_view(padded, window_shape=self.stack_size, axis=0), -1, 1)
+        stacked = np.moveaxis(np.stride_tricks.sliding_window_view(padded, window_shape=self.stack_size, axis=0), -1, 1)
         return None, stacked
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):

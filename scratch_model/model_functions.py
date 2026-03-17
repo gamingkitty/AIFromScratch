@@ -132,6 +132,100 @@ def softmax_cross_entropy_loss_derivative(output, expected):
     return output - expected
 
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def sigmoid_derivative_from_output(y):
+    return y * (1 - y)
+
+
+def softmax_axis(x, axis=-1):
+    x_shifted = x - np.max(x, axis=axis, keepdims=True)
+    exp_x = np.exp(x_shifted)
+    return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
+
+
+def yolo_out_softmax_classes(x):
+    out = x.copy()
+
+    out[..., 0:3] = sigmoid(out[..., 0:3])
+    out[..., 5:] = softmax_axis(out[..., 5:], axis=-1)
+
+    return out
+
+
+def yolo_out_softmax_classes_derivative(output):
+    derivative = np.ones_like(output)
+
+    derivative[..., 0:3] = sigmoid_derivative_from_output(output[..., 0:3])
+
+    return derivative
+
+
+# Lambda parameters define scale of individual loss components
+# Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, w, h, classes))
+def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
+    eps = 1e-12
+    output_clipped = np.clip(output, eps, 1 - eps)
+
+    obj_target = expected[..., 0]
+    obj_pred = output_clipped[..., 0]
+
+    pos_mask = (obj_target == 1).astype(output.dtype)
+    neg_mask = (obj_target == 0).astype(output.dtype)
+
+    obj_loss = -np.sum(
+        pos_mask * np.log(obj_pred)
+    )
+
+    noobj_loss = -np.sum(
+        neg_mask * np.log(1 - obj_pred)
+    )
+
+    # MSE for x, y, w, h where there is an object
+    box_loss = np.sum(
+        pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5]) ** 2
+    )
+
+    # Class cross entropy only where object exists
+    class_pred = np.clip(output[..., 5:], eps, 1 - eps)
+    class_target = expected[..., 5:]
+
+    class_loss = -np.sum(
+        pos_mask[..., None] * class_target * np.log(class_pred)
+    )
+
+    return lambda_obj * obj_loss + lambda_noobj * noobj_loss + lambda_box * box_loss + lambda_class * class_loss
+
+
+def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
+    eps = 1e-12
+    output_clipped = np.clip(output, eps, 1 - eps)
+
+    grad = np.zeros_like(output)
+
+    obj_target = expected[..., 0]
+    obj_pred = output_clipped[..., 0]
+
+    pos_mask = (obj_target == 1).astype(output.dtype)
+    neg_mask = (obj_target == 0).astype(output.dtype)
+
+    # Objectness derivatives
+    grad[..., 0] += lambda_obj * pos_mask * (-1 / obj_pred)
+    grad[..., 0] += lambda_noobj * neg_mask * (1 / (1 - obj_pred))
+
+    # MSE derivative for x, y, w, h where there is an object
+    grad[..., 1:5] = (
+        lambda_box * 2 * pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5])
+    )
+
+    # Only account for class loss in spatial positions with an object in them
+    grad[..., 5:] = lambda_class * pos_mask[..., None] * (output[..., 5:] - expected[..., 5:])
+
+    return grad
+
+
 # Activation functions
 relu = Activation(f_relu, relu_derivative)
 tanh = Activation(f_tanh, tanh_derivative)
@@ -149,6 +243,9 @@ cross_entropy_softmax = Activation(f_softmax, f_derivative)
 vectorized_cross_entropy_softmax = Activation(softmax_vectorized, f_derivative)
 softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_loss_derivative)
 vectorized_softmax_cross_entropy = Loss(vectorized_cross_entropy_loss, vectorized_softmax_cross_entropy_derivative)
+
+yolo_activation = Activation(yolo_out_softmax_classes, yolo_out_softmax_classes_derivative)
+yolo_loss = Loss(yolo_loss_softmax_classes, yolo_loss_softmax_classes_derivative)
 
 
 def causal_mask(t):

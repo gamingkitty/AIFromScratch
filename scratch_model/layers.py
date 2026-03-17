@@ -133,12 +133,14 @@ class Dense:
 
 
 class Convolution:
-    def __init__(self, kernel_num, kernel_shape, activation_function, padding=0):
+    def __init__(self, kernel_num, kernel_shape, activation_function=None, padding=0, stride=1):
         self.kernel_num = kernel_num
         self.kernel_shape = kernel_shape
         self.true_kernel_shape = None
         self.activation_function = activation_function
         self.padding = padding
+        # Implement later
+        self.stride = stride
 
         self.kernels = None
         self.kernels_gradient = None
@@ -153,8 +155,8 @@ class Convolution:
         self.true_kernel_shape = (previous_layer_output_shape[0], self.kernel_num, *self.kernel_shape)
         self.output_shape = (
             self.kernel_num,
-            previous_layer_output_shape[1] - self.kernel_shape[0] + 1 + 2 * self.padding,
-            previous_layer_output_shape[2] - self.kernel_shape[1] + 1 + 2 * self.padding
+            (previous_layer_output_shape[1] - self.kernel_shape[0] + 1 + 2 * self.padding) // self.stride,
+            (previous_layer_output_shape[2] - self.kernel_shape[1] + 1 + 2 * self.padding) // self.stride
         )
 
         fan_in = np.prod(self.true_kernel_shape) / self.kernel_num
@@ -182,11 +184,14 @@ class Convolution:
             constant_values=0
         )
         # Gets windows in shape (b, channel, window_h, window_w, k_h, k_w) from input (b, c, h, w)
-        windows = get_windows(self.kernel_shape, padded_activation)
+        windows = get_windows(self.kernel_shape, padded_activation, stride=self.stride)
 
         # Outputs b, kernel_num, window_h, window_w by multiplying k_h and k_w and summing
         z_data = np.einsum('bcijhw,ckhw->bkij', windows, self.kernels) + self.biases[np.newaxis, :, np.newaxis, np.newaxis]
-        a_data = self.activation_function(z_data)
+        if self.activation_function is not None:
+            a_data = self.activation_function(z_data)
+        else:
+            a_data = z_data
 
         return (z_data, padded_activation), a_data
 
@@ -195,17 +200,20 @@ class Convolution:
 
         activation_derivative = self.activation_function.derivative(z_data)
 
-        if self.activation_function.is_elementwise:
-            dc_dz = dc_da * activation_derivative
+        if self.activation_function is not None:
+            if self.activation_function.is_elementwise:
+                dc_dz = dc_da * activation_derivative
+            else:
+                raise ValueError("Non elementwise activation not implemented for Convolutional layer yet")
         else:
-            raise ValueError("Non elementwise activation not implemented for Convolutional layer yet")
+            dc_dz = dc_da
 
         # dc_dz is shape (b, k, out_h, out_w)
         self.bias_gradient += np.sum(dc_dz, axis=(0, 2, 3))
 
         # Get window views of prev_layer_a where each window corresponds to one number in a kernel
         # Shape (b, c, kernel_h, kernel_w, out_h, out_w)
-        prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation)
+        prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation, stride=self.stride)
 
         self.kernels_gradient += np.einsum('bchwij,bkij->ckhw', prev_layer_a_windows, dc_dz)
 
@@ -214,7 +222,7 @@ class Convolution:
 
         # Old code that doesn't work since adding to a window doesn't work as expected
         # Shape (b, c, out_h, out_w, k_h, k_w)
-        # dc_da_windows = get_windows(self.kernel_shape, new_dc_da)
+        # dc_da_windows = get_windows(self.kernel_shape, new_dc_da, stride=self.stride)
         # Output shape is (b, k, out_h, out_w)
         # Kernel shape is (c, k, k_h, k_w)
         # dc_da_windows += np.einsum('bkij,ckhw->bcijhw', dc_dz, self.kernels)
@@ -225,7 +233,7 @@ class Convolution:
         # Works although uses for loops
         for kh in range(k_h):
             for kw in range(k_w):
-                new_dc_da[:, :, kh:kh + out_h, kw:kw + out_w] += np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
+                new_dc_da[:, :, kh:kh + out_h:self.stride, kw:kw + out_w:self.stride] += np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
 
         if self.padding == 0:
             return new_dc_da
@@ -981,7 +989,7 @@ class Flatten:
         self.output_size = None
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
-        self.input_shape = (-1, *previous_layer_output_shape)
+        self.input_shape = previous_layer_output_shape
         self.output_size = np.prod(previous_layer_output_shape)
 
     def predict(self, prev_layer_activation):
@@ -991,7 +999,7 @@ class Flatten:
         return None, prev_layer_activation.reshape(prev_layer_activation.shape[0], -1)
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        return np.reshape(dc_da, self.input_shape)
+        return np.reshape(dc_da, (dc_da.shape[0], *self.input_shape))
 
     def update_weights(self, learning_rate, grad_scale=1):
         pass
@@ -1297,6 +1305,79 @@ class EmbeddingTiedOutput:
 
     def get_norm(self):
         return np.sum(self.bias_gradient * self.bias_gradient)
+
+
+class Transpose:
+    def __init__(self, axes):
+        # Account for batch axis
+        self.axes = tuple([0] + [axis + 1 for axis in axes])
+        self.dc_da_axes = np.zeros(len(axes) + 1, dtype=np.int64)
+        for i in range(axes):
+            self.dc_da_axes[axes[i] + 1] = i + 1
+        self.dc_da_axes = tuple(self.dc_da_axes)
+
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        self.output_shape = np.zeros(len(previous_layer_output_shape), dtype=np.int64)
+        for i in range(1, len(self.axes)):
+            self.output_shape[i - 1] = previous_layer_output_shape[self.axes[i] - 1]
+        self.output_shape = tuple(self.output_shape)
+
+    def predict(self, prev_layer_activation):
+        return np.transpose(prev_layer_activation, self.axes)
+
+    def forward_pass(self, prev_layer_activation):
+        return None, np.transpose(prev_layer_activation, self.axes)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return np.transpose(dc_da, self.dc_da_axes)
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+
+    def get_norm(self):
+        return 0
+
+
+class ActivationFunction:
+    def __init__(self, activation_function):
+        self.activation_function = activation_function
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        self.output_shape = previous_layer_output_shape
+
+    def predict(self, prev_layer_activation):
+        return self.activation_function(prev_layer_activation)
+
+    def forward_pass(self, prev_layer_activation):
+        return None, self.activation_function(prev_layer_activation)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        da_dz = self.activation_function.derivative(this_layer_z)
+        if self.activation_function.is_elementwise:
+            return dc_da * da_dz
+        else:
+            return np.einsum('...x,...xy->...y', dc_da, da_dz)
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+
+    def get_norm(self):
+        return 0
 
 
 class Mean:

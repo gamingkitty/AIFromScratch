@@ -2,11 +2,9 @@ import random
 import sys
 
 import pygame
-from scratch_model import model
 import chess_board
 import numpy as np
-import model_functions
-import layers
+from scratch_model import *
 
 
 def get_ohe_board(board):
@@ -32,13 +30,18 @@ def main():
     pygame.event.set_allowed([pygame.KEYDOWN, pygame.QUIT, pygame.KEYUP, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
 
     chess_model = model.Model(
-        model_functions.cross_entropy,
+        model_functions.softmax_cross_entropy,
         (7, 8, 8),
-        layers.Convolution(64, (3, 3), model_functions.relu),
-        layers.Convolution(128, (3, 3), model_functions.relu),
-        layers.Dense(256, model_functions.relu),
-        layers.Dense(128, model_functions.relu),
-        layers.Dense(4096, model_functions.softmax)
+        [
+            layers.Convolution(64, (3, 3), model_functions.relu, padding=1),
+            layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
+
+            layers.Flatten(),
+
+            layers.Dense(256, model_functions.relu),
+            layers.Dense(128, model_functions.relu),
+            layers.Dense(4096, model_functions.cross_entropy_softmax)
+        ]
     )
 
     tile_size = 80
@@ -146,7 +149,7 @@ def main():
                         else:
                             temp_board_ohe = get_ohe_board(board.opponent_board)
 
-                        move_prediction = chess_model.predict(make_board_channels(temp_board_ohe))
+                        move_prediction = chess_model.predict(np.array([make_board_channels(temp_board_ohe)]))[0]
 
                         top_move = None
                         top_score = -1
@@ -196,7 +199,7 @@ def main():
                         train_positions += positions_i
                         train_moves += moves_i
                     train = False
-                    chess_model.fit(np.array(train_positions), np.array(train_moves), 1, 0.01)
+                    chess_model.fit(np.array(train_positions), np.array(train_moves), 3, 0.001)
                     positions = []
                     moves = []
                     board.reset()
@@ -211,7 +214,7 @@ def main():
                         else:
                             temp_board_ohe = get_ohe_board(board.opponent_board)
 
-                        move_prediction = chess_model.predict(make_board_channels(temp_board_ohe))
+                        move_prediction = chess_model.predict(np.array([make_board_channels(temp_board_ohe)]))[0]
 
                         top_move = None
                         top_score = -1
@@ -239,7 +242,6 @@ def main():
                         legal_moves = board.get_legal_moves(is_black_turn)
                     else:
                         print("You are white this time")
-
 
         pygame.display.flip()
 

@@ -29,7 +29,7 @@ def main():
     aqua = (5, 195, 221)
     red = (255, 0, 0)
 
-    ai_model = Model.load("Models/cifar_convolution_4")
+    ai_model = Model.load("Models/cifar_convolution_7")
 
     image = np.zeros((3, 32, 32))
 

@@ -18,7 +18,7 @@ def default_learning_rate(step):
 
 
 class Model:
-    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.AdamW, optimizer_args=()):
+    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.AdamW, optimizer_args=(), dtype=np.float32):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
@@ -30,7 +30,7 @@ class Model:
 
         prev_output_shape = input_shape
         for layer in self.layers:
-            layer.init_weights(prev_output_shape, optimizer, optimizer_args=optimizer_args)
+            layer.init_weights(prev_output_shape, optimizer, optimizer_args=optimizer_args, dtype=dtype)
             prev_output_shape = layer.get_output_shape()
 
         self.output_shape = prev_output_shape
@@ -84,11 +84,11 @@ class Model:
         accuracy_function=default_accuracy,
         learning_rate_function=default_learning_rate,
         start_step=0,
+        data_augmentation_function=None,
+        data_save_file=None
     ):
         if console_updates:
             print("Training model...")
-
-        data_size = len(data)
 
         for i in range(epochs):
             if shuffle_data:
@@ -96,12 +96,19 @@ class Model:
                 random.shuffle(combined)
                 data, labels = map(list, zip(*combined))
 
+            if data_augmentation_function is not None:
+                augmented_data = data_augmentation_function(data)
+            else:
+                augmented_data = data
+
             if not is_pre_batched:
-                data_batches = np.array_split(np.array(data), (len(data) + batch_size - 1) // batch_size)
+                data_batches = np.array_split(np.array(augmented_data), (len(augmented_data) + batch_size - 1) // batch_size)
                 label_batches = np.array_split(np.array(labels), (len(labels) + batch_size - 1) // batch_size)
             else:
-                data_batches = data
+                data_batches = augmented_data
                 label_batches = labels
+
+            num_batches = len(data_batches)
 
             total_loss = 0
             total_correct = 0
@@ -117,7 +124,8 @@ class Model:
                 cur_correct = accuracy_function(a_data[-1], current_label_batch)
                 self.loss_data.append(cur_loss / batch_len)
                 self.accuracy_data.append(cur_correct / batch_len)
-                self.steps.append(j + start_step)
+                cur_step = (i * num_batches) + j + start_step
+                self.steps.append(cur_step)
                 total_loss += cur_loss
                 total_correct += cur_correct
 
@@ -133,7 +141,7 @@ class Model:
                     scale = (self.clip / norm)
 
                 for layer in self.layers:
-                    layer.update_weights(learning_rate * learning_rate_function(i * data_size + j + start_step), grad_scale=scale)
+                    layer.update_weights(learning_rate * learning_rate_function(cur_step), grad_scale=scale)
 
                 total_examples += batch_len
 
@@ -146,6 +154,12 @@ class Model:
                     # print(f"Norm Time: {layers.layer_norm_time}")
                     # print(f"Positional Time: {layers.positional_time}")
                     # print(f"Dropout Time: {layers.dropout_time}")
+
+            if data_save_file is not None:
+                self.save_csv(data_save_file)
+                self.steps = []
+                self.loss_data = []
+                self.accuracy_data = []
 
             if console_updates:
                 print(f"Finished epoch {i + 1} with an average loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy.")

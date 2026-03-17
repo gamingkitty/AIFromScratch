@@ -113,8 +113,6 @@ class Dense:
         self.bias_gradient += np.sum(dc_dz, axis=0)
 
         dc_da = np.dot(dc_dz, self.weights.T)
-        # print(dc_da[0])
-        # print()
         return dc_da
 
     def update_weights(self, learning_rate, grad_scale=1):
@@ -209,7 +207,6 @@ class Convolution:
         # Shape (b, c, kernel_h, kernel_w, out_h, out_w)
         prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation)
 
-        # Possibly look into speeding this up, because it does recalculate a lot of things because of how the windows work.
         self.kernels_gradient += np.einsum('bchwij,bkij->ckhw', prev_layer_a_windows, dc_dz)
 
         # Shape (b, c, in_h, in_w)
@@ -250,6 +247,7 @@ class Convolution:
         return np.sum(self.bias_gradient * self.bias_gradient) + np.sum(self.kernels_gradient * self.kernels_gradient)
 
 
+# Currently only works for non overlapping windows
 class MaxPooling:
     def __init__(self, kernel_shape, stride):
         self.kernel_shape = kernel_shape
@@ -270,7 +268,7 @@ class MaxPooling:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
-        # Shape (b, c, win_h, win_w, k_h, k_w)
+        # Shape (b, c, out_h, out_w, k_h, k_w)
         windows = get_windows(self.kernel_shape, prev_layer_activation, stride=self.stride)
 
         pooled = np.max(windows, axis=(-2, -1))
@@ -1098,7 +1096,7 @@ class ResidualBlock:
 
 
 class LayerNorm:
-    def __init__(self):
+    def __init__(self, axis=(-1,)):
         self.epsilon = 1e-5
         self.weights = None
         self.weights_gradient = None
@@ -1107,17 +1105,18 @@ class LayerNorm:
         self.biases_gradient = None
         self.bias_optimizer = None
         self.output_shape = None
+        self.axis = axis
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
-        in_num = previous_layer_output_shape[-1]
+        in_shape = tuple(previous_layer_output_shape[a] for a in self.axis)
         self.output_shape = previous_layer_output_shape
 
-        self.weights = np.ones(in_num, dtype=dtype)
+        self.weights = np.ones(in_shape, dtype=dtype)
         self.weights_gradient = np.zeros_like(self.weights)
         self.weights_optimizer = optimizer(*optimizer_args)
         self.weights_optimizer.initialize(self.weights, dtype=dtype)
 
-        self.biases = np.zeros(in_num, dtype=dtype)
+        self.biases = np.zeros(in_shape, dtype=dtype)
         self.biases_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
         self.bias_optimizer.initialize(self.biases, dtype=dtype)
@@ -1133,8 +1132,8 @@ class LayerNorm:
     def forward_pass(self, prev_layer_activation):
         # global layer_norm_time
         # t0 = time.perf_counter()
-        dif_mean = (prev_layer_activation - prev_layer_activation.mean(axis=-1, keepdims=True))
-        var = (dif_mean * dif_mean).mean(axis=-1, keepdims=True)
+        dif_mean = (prev_layer_activation - prev_layer_activation.mean(axis=self.axis, keepdims=True))
+        var = (dif_mean * dif_mean).mean(axis=self.axis, keepdims=True)
         inv_std = 1 / np.sqrt(var + self.epsilon)
 
         quotient = dif_mean * inv_std
@@ -1149,14 +1148,14 @@ class LayerNorm:
         # t0 = time.perf_counter()
         inv_std, quotient = this_layer_z
 
-        self.weights_gradient += np.sum(quotient * dc_da, axis=tuple(range(dc_da.ndim - 1)))
-        self.biases_gradient += np.sum(dc_da, axis=tuple(range(dc_da.ndim - 1)))
+        self.weights_gradient += np.sum(quotient * dc_da, axis=tuple(range(dc_da.ndim - len(self.axis))))
+        self.biases_gradient += np.sum(dc_da, axis=tuple(range(dc_da.ndim - len(self.axis))))
 
         g = dc_da * self.weights
 
         # new_dc_da = ((g - (g.sum() / n)) / epsilon_std) - ((dif_mean * np.dot(dif_mean, g)) / (n * np.pow(epsilon_std, 3)))
         # Equivalent but slightly faster version
-        new_dc_da = (g - g.mean(axis=-1, keepdims=True) - quotient * (g * quotient).mean(axis=-1, keepdims=True)) * inv_std
+        new_dc_da = (g - g.mean(axis=self.axis, keepdims=True) - quotient * (g * quotient).mean(axis=self.axis, keepdims=True)) * inv_std
 
         # layer_norm_time += time.perf_counter() - t0
         return new_dc_da
@@ -1298,3 +1297,47 @@ class EmbeddingTiedOutput:
 
     def get_norm(self):
         return np.sum(self.bias_gradient * self.bias_gradient)
+
+
+class Mean:
+    def __init__(self, axis=(0,)):
+        self.output_shape = None
+        self.axis = axis
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        remove = {i % len(previous_layer_output_shape) for i in self.axis}
+
+        self.output_shape = tuple(x for i, x in enumerate(previous_layer_output_shape) if i not in remove)
+
+    def predict(self, prev_layer_activation):
+        return np.mean(prev_layer_activation, axis=self.axis)
+
+    def forward_pass(self, prev_layer_activation):
+        return None, np.mean(prev_layer_activation, axis=self.axis)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        input_shape = prev_layer_a.shape
+        ndim = len(input_shape)
+
+        # normalize axes
+        axes = tuple(sorted({ax % ndim for ax in self.axis}))
+
+        count = np.prod([input_shape[ax] for ax in axes], dtype=np.int64)
+
+        grad_shape = list(input_shape)
+        for ax in axes:
+            grad_shape[ax] = 1
+
+        return np.broadcast_to(dc_da.reshape(grad_shape), input_shape) / np.array(count, dtype=dc_da.dtype)
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+
+    def get_norm(self):
+        return 0

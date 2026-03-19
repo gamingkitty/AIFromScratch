@@ -260,11 +260,9 @@ class MaxPooling:
     def __init__(self, kernel_shape, stride):
         self.kernel_shape = kernel_shape
         self.stride = stride
-        self.input_shape = None
         self.output_shape = None
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
-        self.input_shape = previous_layer_output_shape
         self.output_shape = (
             previous_layer_output_shape[0],
             (previous_layer_output_shape[1] - self.kernel_shape[0]) // self.stride + 1,
@@ -1016,20 +1014,19 @@ class Flatten:
 
 class Reshape:
     def __init__(self, shape):
-        self.input_shape = None
         self.output_shape = shape
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
-        self.input_shape = previous_layer_output_shape
+        pass
 
     def predict(self, prev_layer_activation):
-        return np.reshape(prev_layer_activation, (-1, *self.output_shape))
+        return np.reshape(prev_layer_activation, (prev_layer_activation.shape[0], *self.output_shape))
 
     def forward_pass(self, prev_layer_activation):
-        return None, np.reshape(prev_layer_activation, (-1, *self.output_shape))
+        return None, np.reshape(prev_layer_activation, (prev_layer_activation.shape[0], *self.output_shape))
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        return np.reshape(dc_da, (-1, *self.input_shape))
+        return np.reshape(dc_da, prev_layer_a.shape)
 
     def update_weights(self, learning_rate, grad_scale=1):
         pass
@@ -1410,6 +1407,39 @@ class Mean:
             grad_shape[ax] = 1
 
         return np.broadcast_to(dc_da.reshape(grad_shape), input_shape) / np.array(count, dtype=dc_da.dtype)
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        pass
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        return 0
+
+    def get_norm(self):
+        return 0
+
+
+class ReshapeOnAxis:
+    def __init__(self, shape, axis=0):
+        self.output_shape = None
+        self.input_shape = None
+        self.new_shape = shape
+        self.axis = axis
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        self.output_shape = (*previous_layer_output_shape[:self.axis], *self.new_shape, *previous_layer_output_shape[self.axis + 1:])
+
+    def predict(self, prev_layer_activation):
+        z, a = self.forward_pass(prev_layer_activation)
+        return a
+
+    def forward_pass(self, prev_layer_activation):
+        return None, np.reshape(prev_layer_activation, (*prev_layer_activation[:self.axis + 1], *self.new_shape, *prev_layer_activation.shape[self.axis + 2:]))
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        return np.reshape(dc_da, prev_layer_a.shape)
 
     def update_weights(self, learning_rate, grad_scale=1):
         pass

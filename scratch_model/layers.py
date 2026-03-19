@@ -183,24 +183,23 @@ class Convolution:
             mode="constant",
             constant_values=0
         )
-        # Gets windows in shape (b, channel, window_h, window_w, k_h, k_w) from input (b, c, h, w)
+        # Gets windows in shape (b, channel, out_h, out_w, k_h, k_w) from input (b, c, h, w)
         windows = get_windows(self.kernel_shape, padded_activation, stride=self.stride)
 
-        # Outputs b, kernel_num, window_h, window_w by multiplying k_h and k_w and summing
+        # Outputs b, kernel_num, out_h, out_w by multiplying k_h and k_w and summing
         z_data = np.einsum('bcijhw,ckhw->bkij', windows, self.kernels) + self.biases[np.newaxis, :, np.newaxis, np.newaxis]
         if self.activation_function is not None:
             a_data = self.activation_function(z_data)
         else:
             a_data = z_data
 
-        return (z_data, padded_activation), a_data
+        return (z_data, windows, padded_activation), a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        z_data, padded_activation = this_layer_z
-
-        activation_derivative = self.activation_function.derivative(z_data)
+        z_data, windows, padded_activation = this_layer_z
 
         if self.activation_function is not None:
+            activation_derivative = self.activation_function.derivative(z_data)
             if self.activation_function.is_elementwise:
                 dc_dz = dc_da * activation_derivative
             else:
@@ -213,9 +212,9 @@ class Convolution:
 
         # Get window views of prev_layer_a where each window corresponds to one number in a kernel
         # Shape (b, c, kernel_h, kernel_w, out_h, out_w)
-        prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation, stride=self.stride)
+        # prev_layer_a_windows = get_windows(self.output_shape[1:], padded_activation, stride=self.stride)
 
-        self.kernels_gradient += np.einsum('bchwij,bkij->ckhw', prev_layer_a_windows, dc_dz)
+        self.kernels_gradient += np.einsum('bcijhw,bkij->ckhw', windows, dc_dz)
 
         # Shape (b, c, in_h, in_w)
         new_dc_da = np.zeros_like(padded_activation)
@@ -233,7 +232,8 @@ class Convolution:
         # Works although uses for loops
         for kh in range(k_h):
             for kw in range(k_w):
-                new_dc_da[:, :, kh:kh + out_h:self.stride, kw:kw + out_w:self.stride] += np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
+                test = np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
+                new_dc_da[:, :, kh:kh + out_h * self.stride:self.stride, kw:kw + out_w * self.stride:self.stride] += test
 
         if self.padding == 0:
             return new_dc_da

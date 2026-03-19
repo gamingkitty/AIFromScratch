@@ -42,12 +42,12 @@ def main():
             # layers.Convolution(64, (3, 3), model_functions.relu),
             # layers.MaxPooling((2, 2), 2),
             layers.Convolution(32, (3, 3), model_functions.relu),
-            layers.LayerNorm(axis=(-3, -2, -1)),
-            # layers.MaxPooling((2, 2), 2),
-            # layers.Dense(128, model_functions.relu),
-            # layers.LayerNorm(),
-            # layers.Dense(512, model_functions.relu),
+            layers.MaxPooling((2, 2), 2),
+            layers.Convolution(64, (3, 3), model_functions.relu),
+
+            # layers.Mean(axis=(-2, -1)),
             layers.Flatten(),
+
             layers.Dense(128, model_functions.relu),
             # layers.Dropout(0.5),
 

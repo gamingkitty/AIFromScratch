@@ -145,7 +145,7 @@ class Model:
 
                 total_examples += batch_len
 
-                if (j + 1) % 100 == 0 and console_updates:
+                if (j + 1) % 10 == 0 and console_updates:
                     t = time.perf_counter()
                     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
                     last_time = t

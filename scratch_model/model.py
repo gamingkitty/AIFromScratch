@@ -120,6 +120,7 @@ class Model:
                 batch_len = len(current_batch)
 
                 z_data, a_data = self.forward_propagate(current_batch)
+                print("Did forward")
                 cur_loss = self.loss(a_data[-1], current_label_batch)
                 cur_correct = accuracy_function(a_data[-1], current_label_batch)
                 self.loss_data.append(cur_loss / batch_len)
@@ -130,6 +131,7 @@ class Model:
                 total_correct += cur_correct
 
                 self.backwards_propagate(z_data, a_data, current_label_batch)
+                print("Did backwards")
 
                 norm_sqr = 0
                 for layer in self.layers:
@@ -145,7 +147,7 @@ class Model:
 
                 total_examples += batch_len
 
-                if (j + 1) % 10 == 0 and console_updates:
+                if (j + 1) % 1 == 0 and console_updates:
                     t = time.perf_counter()
                     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
                     last_time = t

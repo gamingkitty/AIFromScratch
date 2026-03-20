@@ -232,8 +232,7 @@ class Convolution:
         # Works although uses for loops
         for kh in range(k_h):
             for kw in range(k_w):
-                test = np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
-                new_dc_da[:, :, kh:kh + out_h * self.stride:self.stride, kw:kw + out_w * self.stride:self.stride] += test
+                new_dc_da[:, :, kh:kh + out_h * self.stride:self.stride, kw:kw + out_w * self.stride:self.stride] += np.einsum('bkij,ck->bcij', dc_dz, self.kernels[:, :, kh, kw])
 
         if self.padding == 0:
             return new_dc_da
@@ -1309,7 +1308,7 @@ class Transpose:
         # Account for batch axis
         self.axes = tuple([0] + [axis + 1 for axis in axes])
         self.dc_da_axes = np.zeros(len(axes) + 1, dtype=np.int64)
-        for i in range(axes):
+        for i in range(len(axes)):
             self.dc_da_axes[axes[i] + 1] = i + 1
         self.dc_da_axes = tuple(self.dc_da_axes)
 
@@ -1358,7 +1357,7 @@ class ActivationFunction:
         return None, self.activation_function(prev_layer_activation)
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        da_dz = self.activation_function.derivative(this_layer_z)
+        da_dz = self.activation_function.derivative(prev_layer_a)
         if self.activation_function.is_elementwise:
             return dc_da * da_dz
         else:
@@ -1436,7 +1435,7 @@ class ReshapeOnAxis:
         return a
 
     def forward_pass(self, prev_layer_activation):
-        return None, np.reshape(prev_layer_activation, (*prev_layer_activation[:self.axis + 1], *self.new_shape, *prev_layer_activation.shape[self.axis + 2:]))
+        return None, np.reshape(prev_layer_activation, (*prev_layer_activation.shape[:self.axis + 1], *self.new_shape, *prev_layer_activation.shape[self.axis + 2:]))
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         return np.reshape(dc_da, prev_layer_a.shape)

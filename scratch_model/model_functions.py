@@ -31,7 +31,7 @@ def f_relu(x):
 
 
 def relu_derivative(x):
-    return (x > 0).astype(int)
+    return (x > 0).astype(x.dtype)
 
 
 def f_tanh(x):
@@ -133,6 +133,7 @@ def softmax_cross_entropy_loss_derivative(output, expected):
 
 
 def sigmoid(x):
+    x = np.clip(x, -80, 80)
     return 1 / (1 + np.exp(-x))
 
 
@@ -164,9 +165,9 @@ def yolo_out_softmax_classes_derivative(output):
 
 
 # Lambda parameters define scale of individual loss components
-# Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, w, h, classes))
+# Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, h, w, classes))
 def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
-    eps = 1e-12
+    eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
     obj_target = expected[..., 0]
@@ -200,7 +201,7 @@ def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.1
 
 
 def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
-    eps = 1e-12
+    eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
     grad = np.zeros_like(output)

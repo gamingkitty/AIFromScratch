@@ -199,6 +199,9 @@ class COCOBucketBatchLoader:
             "resized_size": samples[0]["resized_size"],  # all same within batch
         }
 
+    def has_batch(self, batch_index: int) -> bool:
+        return batch_index < len(self.batches)
+
     def iter_batches(self) -> Iterator[dict]:
         for batch_index in range(len(self.batches)):
             yield self.get_batch(batch_index)

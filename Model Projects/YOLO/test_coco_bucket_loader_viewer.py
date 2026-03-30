@@ -2,9 +2,10 @@ import argparse
 import os
 import sys
 from typing import Dict, List, Tuple
-
 import cv2
+from scratch_model import *
 import numpy as np
+import cupy as cp
 
 from coco_bucket_loader import COCOBucketBatchLoader
 
@@ -88,6 +89,49 @@ def draw_sample(
     return vis
 
 
+def get_boxes(image, yolo_model, object_threshold=0.5):
+    image = np.transpose(image, (2, 0, 1))
+    # Shape (spatial, spatial, anchors, 85)
+    prediction = yolo_model.predict(cp.array([image]))[0]
+
+    image_h, image_w = image.shape[1:]
+    x, y, a, d = prediction.shape
+
+    reshaped_pred = prediction.reshape(-1, d)
+    object_mask = reshaped_pred[:, 0] >= object_threshold
+    object_predictions = reshaped_pred[object_mask]
+
+    # shape (x, y, 2)
+    xy = cp.stack(cp.indices((x, y)), axis=-1)
+    xy = cp.repeat(xy[:, :, None, :], a, axis=2)
+    xy_flat = xy.reshape(-1, 2)
+
+    # x, y locations of all objects
+    locations = xy_flat[object_mask]
+
+    center_x = 32 * (object_predictions[:, 1] + locations[:,  0])
+    center_y = 32 * (object_predictions[:, 2] + locations[:, 1])
+    widths = image_w * object_predictions[:, 4]
+    heights = image_h * object_predictions[:, 3]
+
+    # # (n, 4) where 4 is cx, cy, w, h
+    boxes = cp.zeros((len(object_predictions), 4))
+    boxes[:, 0] = center_x
+    boxes[:, 1] = center_y
+    boxes[:, 2] = widths
+    boxes[:, 3] = heights
+
+    # boxes[:, 0] = object_predictions[:, 0]
+    # boxes[:, 0] = np.clip(center_x - widths / 2, 0, image_w)
+    # boxes[:, 1] = np.clip(center_y - heights / 2, 0, image_h)
+    # boxes[:, 2] = np.clip(center_x + widths / 2, 0, image_w)
+    # boxes[:, 3] = np.clip(center_y + heights / 2, 0, image_h)
+
+    labels = cp.argmax(object_predictions[:, 5:], axis=-1)
+
+    return cp.asnumpy(boxes), cp.asnumpy(labels)
+
+
 def main() -> None:
     loader = COCOBucketBatchLoader(
         image_dir="coco2017/train2017",
@@ -97,6 +141,8 @@ def main() -> None:
         batch_size=64,
         seed=42,
     )
+
+    ai_model = Model.load("Models/coco_yolo_v2_e1")
 
     if loader.num_batches() == 0:
         print("No batches found.")
@@ -109,15 +155,23 @@ def main() -> None:
 
     cv2.namedWindow("COCO", cv2.WINDOW_NORMAL)
 
+    update_boxes = True
+    boxes = None
+    labels = None
+
     while True:
         batch = loader.get_batch(batch_index)
+        if update_boxes:
+            boxes, labels = get_boxes(batch["images"][image_index], ai_model, object_threshold=0.99)
+            update_boxes = False
+
         batch_len = len(batch["images"])
         image_index = max(0, min(image_index, batch_len - 1))
 
         vis = draw_sample(
-            image=batch["images"][image_index],
-            boxes=batch["boxes"][image_index],
-            labels=batch["labels"][image_index],
+            image=np.array(batch["images"][image_index]),
+            boxes=boxes,
+            labels=labels,
             class_names=class_names,
             batch_index=batch_index,
             image_index=image_index,
@@ -131,27 +185,31 @@ def main() -> None:
 
         if key in (ord("q"), 27):
             break
-        elif key in (ord("d"), 83):  # d or right arrow (common OpenCV code)
+        elif key in (ord("d"), 83):
             if image_index < batch_len - 1:
                 image_index += 1
             elif batch_index < loader.num_batches() - 1:
                 batch_index += 1
                 image_index = 0
-        elif key in (ord("a"), 81):  # a or left arrow
+            update_boxes = True
+        elif key in (ord("a"), 81):
             if image_index > 0:
                 image_index -= 1
             elif batch_index > 0:
                 batch_index -= 1
                 prev_batch = loader.get_batch(batch_index)
                 image_index = len(prev_batch["images"]) - 1
-        elif key in (ord("s"), 84):  # s or down arrow
+            update_boxes = True
+        elif key in (ord("s"), 84):
             if batch_index < loader.num_batches() - 1:
                 batch_index += 1
                 image_index = 0
-        elif key in (ord("w"), 82):  # w or up arrow
+            update_boxes = True
+        elif key in (ord("w"), 82):
             if batch_index > 0:
                 batch_index -= 1
                 image_index = 0
+            update_boxes = True
 
     cv2.destroyAllWindows()
 

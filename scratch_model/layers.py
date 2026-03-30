@@ -1,5 +1,5 @@
 import math
-import numpy as np
+from ._gpu_patch import xp as np
 import time
 from scratch_model import optimizers
 
@@ -155,8 +155,8 @@ class Convolution:
         self.true_kernel_shape = (previous_layer_output_shape[0], self.kernel_num, *self.kernel_shape)
         self.output_shape = (
             self.kernel_num,
-            (previous_layer_output_shape[1] - self.kernel_shape[0] + 1 + 2 * self.padding) // self.stride,
-            (previous_layer_output_shape[2] - self.kernel_shape[1] + 1 + 2 * self.padding) // self.stride
+            (previous_layer_output_shape[1] - self.kernel_shape[0] + 2 * self.padding) // self.stride + 1,
+            (previous_layer_output_shape[2] - self.kernel_shape[1] + 2 * self.padding) // self.stride + 1
         )
 
         fan_in = np.prod(self.true_kernel_shape) / self.kernel_num
@@ -1307,7 +1307,7 @@ class Transpose:
     def __init__(self, axes):
         # Account for batch axis
         self.axes = tuple([0] + [axis + 1 for axis in axes])
-        self.dc_da_axes = np.zeros(len(axes) + 1, dtype=np.int64)
+        self.dc_da_axes = [0] * (len(axes) + 1)
         for i in range(len(axes)):
             self.dc_da_axes[axes[i] + 1] = i + 1
         self.dc_da_axes = tuple(self.dc_da_axes)
@@ -1315,7 +1315,7 @@ class Transpose:
         self.output_shape = None
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
-        self.output_shape = np.zeros(len(previous_layer_output_shape), dtype=np.int64)
+        self.output_shape = [0] * len(previous_layer_output_shape)
         for i in range(1, len(self.axes)):
             self.output_shape[i - 1] = previous_layer_output_shape[self.axes[i] - 1]
         self.output_shape = tuple(self.output_shape)
@@ -1423,7 +1423,6 @@ class Mean:
 class ReshapeOnAxis:
     def __init__(self, shape, axis=0):
         self.output_shape = None
-        self.input_shape = None
         self.new_shape = shape
         self.axis = axis
 
@@ -1451,3 +1450,121 @@ class ReshapeOnAxis:
 
     def get_norm(self):
         return 0
+
+
+def split_along_axis(arr, axis, partition):
+    slices_before = [slice(None)] * arr.ndim
+    slices_after = [slice(None)] * arr.ndim
+
+    slices_before[axis] = slice(None, partition)
+    slices_after[axis] = slice(partition, None)
+
+    return arr[tuple(slices_before)], arr[tuple(slices_after)]
+
+
+class Split:
+    def __init__(self, before_layers, after_layers, axis, partition):
+        self.before_layers = before_layers
+        self.after_layers = after_layers
+        self.all_layers = before_layers + after_layers
+        self.axis = axis
+        self.batch_axis = axis + 1
+        # Everything after and equal to partition goes through after layers, everything before goes to before layers
+        self.partition = partition
+        self.output_partition = None
+        self.output_shape = None
+
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        if self.partition < 0:
+            self.partition = previous_layer_output_shape[self.axis] + 1 + self.partition
+        before_shape = previous_layer_output_shape[:self.axis] + (self.partition,) + previous_layer_output_shape[self.axis + 1:]
+        after_shape = previous_layer_output_shape[:self.axis] + (previous_layer_output_shape[self.axis] - self.partition,) + previous_layer_output_shape[self.axis + 1:]
+
+        before_layer_inp_shape = before_shape
+        for layer in self.before_layers:
+            layer.init_weights(before_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            before_layer_inp_shape = layer.get_output_shape()
+
+        after_layer_inp_shape = after_shape
+        for layer in self.after_layers:
+            layer.init_weights(after_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            after_layer_inp_shape = layer.get_output_shape()
+
+        if not (len(before_layer_inp_shape) == len(after_layer_inp_shape) and
+                before_layer_inp_shape[:self.axis] + before_layer_inp_shape[self.axis + 1:] ==
+                after_layer_inp_shape[:self.axis] + after_layer_inp_shape[self.axis + 1:]):
+            raise ValueError("Before and after layers output shape mismatch!")
+
+        output_axis_num = before_layer_inp_shape[self.axis] + after_layer_inp_shape[self.axis]
+
+        self.output_partition = before_layer_inp_shape[self.axis]
+
+        self.output_shape = before_layer_inp_shape[:self.axis] + (output_axis_num,) + before_layer_inp_shape[self.axis + 1:]
+
+    def predict(self, prev_layer_activation):
+        before, after = split_along_axis(prev_layer_activation, self.batch_axis, self.partition)
+
+        for layer in self.before_layers:
+            before = layer.predict(before)
+
+        for layer in self.after_layers:
+            after = layer.predict(after)
+
+        return np.concatenate([before, after], axis=self.batch_axis)
+
+    def forward_pass(self, prev_layer_activation):
+        before, after = split_along_axis(prev_layer_activation, self.batch_axis, self.partition)
+
+        before_z_data = []
+        before_a_data = [before]
+
+        last_value = before
+        for i in range(len(self.before_layers)):
+            z_data_current, a_data_current = self.before_layers[i].forward_pass(last_value)
+            last_value = a_data_current
+            before_a_data.append(a_data_current)
+            before_z_data.append(z_data_current)
+
+        after_z_data = []
+        after_a_data = [after]
+
+        last_value = after
+        for i in range(len(self.after_layers)):
+            z_data_current, a_data_current = self.after_layers[i].forward_pass(last_value)
+            last_value = a_data_current
+            after_a_data.append(a_data_current)
+            after_z_data.append(z_data_current)
+
+        out = np.concatenate([before_a_data[-1], after_a_data[-1]], axis=self.batch_axis)
+
+        return (before_a_data, before_z_data, after_a_data, after_z_data), out
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        before, after = split_along_axis(dc_da, self.batch_axis, self.output_partition)
+        before_a_data, before_z_data, after_a_data, after_z_data = this_layer_z
+
+        before_current_dc_da = before
+        for i in reversed(range(len(self.before_layers))):
+            before_current_dc_da = self.before_layers[i].backwards_pass(before_a_data[i], before_z_data[i], before_current_dc_da)
+
+        after_current_dc_da = after
+        for i in reversed(range(len(self.after_layers))):
+            after_current_dc_da = self.after_layers[i].backwards_pass(after_a_data[i], after_z_data[i], after_current_dc_da)
+
+        return np.concatenate([before_current_dc_da, after_current_dc_da], axis=self.batch_axis)
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        for layer in self.all_layers:
+            layer.update_weights(learning_rate, grad_scale=grad_scale)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        param_num = 0
+        for layer in self.all_layers:
+            param_num += layer.count_params()
+        return param_num
+
+    def get_norm(self):
+        return sum(layer.get_norm() for layer in self.all_layers)

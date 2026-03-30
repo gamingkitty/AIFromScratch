@@ -1,4 +1,4 @@
-import numpy as np
+from ._gpu_patch import xp as np
 
 
 class Activation:
@@ -150,23 +150,24 @@ def softmax_axis(x, axis=-1):
 def yolo_out_softmax_classes(x):
     out = x.copy()
 
-    out[..., 0:3] = sigmoid(out[..., 0:3])
+    out[..., 0:5] = sigmoid(out[..., 0:5])
     out[..., 5:] = softmax_axis(out[..., 5:], axis=-1)
 
     return out
 
 
-def yolo_out_softmax_classes_derivative(output):
-    derivative = np.ones_like(output)
+def yolo_out_softmax_classes_derivative(x):
+    box_sigmoid = sigmoid(x[..., 0:5])
+    derivative = np.ones_like(x)
 
-    derivative[..., 0:3] = sigmoid_derivative_from_output(output[..., 0:3])
+    derivative[..., 0:5] = sigmoid_derivative_from_output(box_sigmoid)
 
     return derivative
 
 
 # Lambda parameters define scale of individual loss components
 # Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, h, w, classes))
-def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=1.0, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
@@ -176,31 +177,24 @@ def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.1
     pos_mask = (obj_target == 1).astype(output.dtype)
     neg_mask = (obj_target == 0).astype(output.dtype)
 
-    obj_loss = -np.sum(
-        pos_mask * np.log(obj_pred)
-    )
+    num_pos = np.maximum(1.0, np.sum(pos_mask, axis=(1, 2, 3), keepdims=True))
+    num_neg = np.maximum(1.0, np.sum(neg_mask, axis=(1, 2, 3), keepdims=True))
 
-    noobj_loss = -np.sum(
-        neg_mask * np.log(1 - obj_pred)
-    )
+    obj_loss = -np.sum(pos_mask * np.log(obj_pred) / num_pos, axis=(1, 2, 3))
 
-    # MSE for x, y, w, h where there is an object
-    box_loss = np.sum(
-        pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5]) ** 2
-    )
+    noobj_loss = -np.sum(neg_mask * np.log(1 - obj_pred) / num_neg, axis=(1, 2, 3))
 
-    # Class cross entropy only where object exists
+    box_loss = np.sum(pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5]) ** 2 / num_pos[..., None], axis=(1, 2, 3, 4))
+
     class_pred = np.clip(output[..., 5:], eps, 1 - eps)
     class_target = expected[..., 5:]
 
-    class_loss = -np.sum(
-        pos_mask[..., None] * class_target * np.log(class_pred)
-    )
+    class_loss = -np.sum(pos_mask[..., None] * class_target * np.log(class_pred) / num_pos[..., None], axis=(1, 2, 3, 4))
 
-    return lambda_obj * obj_loss + lambda_noobj * noobj_loss + lambda_box * box_loss + lambda_class * class_loss
+    return np.sum(lambda_obj * obj_loss + lambda_noobj * noobj_loss + lambda_box * box_loss + lambda_class * class_loss)
 
 
-def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=0.1, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=1.0, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
@@ -212,17 +206,16 @@ def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambd
     pos_mask = (obj_target == 1).astype(output.dtype)
     neg_mask = (obj_target == 0).astype(output.dtype)
 
-    # Objectness derivatives
-    grad[..., 0] += lambda_obj * pos_mask * (-1 / obj_pred)
-    grad[..., 0] += lambda_noobj * neg_mask * (1 / (1 - obj_pred))
+    # shape (b, 1, 1, 1)
+    num_pos = np.maximum(1.0, np.sum(pos_mask, axis=(1, 2, 3), keepdims=True))
+    num_neg = np.maximum(1.0, np.sum(neg_mask, axis=(1, 2, 3), keepdims=True))
 
-    # MSE derivative for x, y, w, h where there is an object
-    grad[..., 1:5] = (
-        lambda_box * 2 * pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5])
-    )
+    grad[..., 0] += lambda_obj * pos_mask * (-1 / obj_pred) / num_pos
+    grad[..., 0] += lambda_noobj * neg_mask * (1 / (1 - obj_pred)) / num_neg
 
-    # Only account for class loss in spatial positions with an object in them
-    grad[..., 5:] = lambda_class * pos_mask[..., None] * (output[..., 5:] - expected[..., 5:])
+    grad[..., 1:5] = lambda_box * 2 * pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5]) / num_pos[..., None]
+
+    grad[..., 5:] = lambda_class * pos_mask[..., None] * (output[..., 5:] - expected[..., 5:]) / num_pos[..., None]
 
     return grad
 

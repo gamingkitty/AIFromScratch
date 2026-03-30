@@ -202,6 +202,9 @@ class COCOBucketBatchLoader:
     def has_batch(self, batch_index: int) -> bool:
         return batch_index < len(self.batches)
 
+    def get_batch_num(self):
+        return len(self.batches)
+
     def iter_batches(self) -> Iterator[dict]:
         for batch_index in range(len(self.batches)):
             yield self.get_batch(batch_index)

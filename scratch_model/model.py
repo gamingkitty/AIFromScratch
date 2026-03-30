@@ -1,6 +1,6 @@
 import time
 
-import numpy as np
+from ._gpu_patch import xp as np
 import pickle
 import random
 from scratch_model import layers
@@ -18,7 +18,7 @@ def default_learning_rate(step):
 
 
 class Model:
-    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.AdamW, optimizer_args=(), dtype=np.float32):
+    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.Adam, optimizer_args=(), dtype=np.float32):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
@@ -85,7 +85,8 @@ class Model:
         learning_rate_function=default_learning_rate,
         start_step=0,
         data_augmentation_function=None,
-        data_save_file=None
+        data_save_file=None,
+        steps_to_update_weights=1,
     ):
         if console_updates:
             print("Training model...")
@@ -113,14 +114,18 @@ class Model:
             total_loss = 0
             total_correct = 0
             total_examples = 0
-            last_time = time.perf_counter()
+            # last_time = time.perf_counter()
+            update_counter = 0
+            update_batch_total = 0
             for j in range(len(data_batches)):
                 current_batch = data_batches[j]
                 current_label_batch = label_batches[j]
                 batch_len = len(current_batch)
 
+                update_batch_total += batch_len
+
                 z_data, a_data = self.forward_propagate(current_batch)
-                print("Did forward")
+
                 cur_loss = self.loss(a_data[-1], current_label_batch)
                 cur_correct = accuracy_function(a_data[-1], current_label_batch)
                 self.loss_data.append(cur_loss / batch_len)
@@ -131,31 +136,53 @@ class Model:
                 total_correct += cur_correct
 
                 self.backwards_propagate(z_data, a_data, current_label_batch)
-                print("Did backwards")
 
-                norm_sqr = 0
-                for layer in self.layers:
-                    norm_sqr += layer.get_norm()
+                update_counter += 1
 
-                norm = np.sqrt(norm_sqr)
-                scale = 1
-                if norm > self.clip:
-                    scale = (self.clip / norm)
+                if update_counter >= steps_to_update_weights:
+                    norm_sqr = 0
+                    for layer in self.layers:
+                        n = layer.get_norm()
+                        norm_sqr += n
 
-                for layer in self.layers:
-                    layer.update_weights(learning_rate * learning_rate_function(cur_step), grad_scale=scale)
+                    norm = np.sqrt(norm_sqr) / update_batch_total
+                    scale = 1
+
+                    if norm > self.clip:
+                        scale = (self.clip / norm)
+
+                    for layer in self.layers:
+                        layer.update_weights(learning_rate * learning_rate_function(cur_step), grad_scale=scale / update_batch_total)
+
+                    update_counter = 0
+                    update_batch_total = 0
 
                 total_examples += batch_len
 
-                if (j + 1) % 1 == 0 and console_updates:
-                    t = time.perf_counter()
-                    print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
-                    last_time = t
+                # if (j + 1) % 10 == 0 and console_updates:
+                #     t = time.perf_counter()
+                #     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
+                #     last_time = t
                     # print(f"Attention Time: {layers.attention_time}")
                     # print(f"Dense Time: {layers.dense_time}")
                     # print(f"Norm Time: {layers.layer_norm_time}")
                     # print(f"Positional Time: {layers.positional_time}")
                     # print(f"Dropout Time: {layers.dropout_time}")
+
+            if update_counter > 0:
+                norm_sqr = 0
+                for layer in self.layers:
+                    n = layer.get_norm()
+                    norm_sqr += n
+
+                norm = np.sqrt(norm_sqr) / update_batch_total
+                scale = 1
+
+                if norm > self.clip:
+                    scale = self.clip / norm
+
+                for layer in self.layers:
+                    layer.update_weights(learning_rate * learning_rate_function(((i + 1) * num_batches) + start_step), grad_scale=scale / update_batch_total)
 
             if data_save_file is not None:
                 self.save_csv(data_save_file)

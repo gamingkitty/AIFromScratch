@@ -135,16 +135,16 @@ def main():
     language_model = Model.load("Models/tinychat_tied_0005lr_0001wd_e2.pkl")
 
     # Temp code to support old models
-    # for i in range(len(language_model.layers)):
-    #     if type(language_model.layers[i]) is layers.ResidualBlock:
-    #         layers_to_check = language_model.layers[i].layers
-    #         for j in range(len(layers_to_check)):
-    #             if type(layers_to_check[j]) is layers.Attention:
-    #                 layers_to_check[j].key_cache = []
-    #                 layers_to_check[j].value_cache = []
-    #                 layers_to_check[j].use_kv_cache = True
-    #     if type(language_model.layers[i]) is layers.PositionalEncoder:
-    #         language_model.layers[i].pos = 0
+    for i in range(len(language_model.layers)):
+        if type(language_model.layers[i]) is layers.ResidualBlock:
+            layers_to_check = language_model.layers[i].layers
+            for j in range(len(layers_to_check)):
+                if type(layers_to_check[j]) is layers.Attention:
+                    layers_to_check[j].key_cache = []
+                    layers_to_check[j].value_cache = []
+                    layers_to_check[j].use_kv_cache = True
+        if type(language_model.layers[i]) is layers.PositionalEncoder:
+            language_model.layers[i].pos = 0
 
     print(f"Model param num: {language_model.get_param_num()}")
 

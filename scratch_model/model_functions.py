@@ -92,7 +92,7 @@ def softmax_vectorized_derivative(x):
 def f_gelu(x):
     a = np.sqrt(2.0 / np.pi)
     u = a * (x + 0.044715 * x**3)
-    return 0.5 * x * (1.0 + np.tanh(u))
+    return (0.5 * x * (1.0 + np.tanh(u))).astype(x.dtype)
 
 
 def gelu_derivative(x):
@@ -101,7 +101,7 @@ def gelu_derivative(x):
     t = np.tanh(u)
 
     u_prime = a * (1.0 + 3.0 * 0.044715 * x**2)
-    return 0.5 * (1.0 + t) + 0.5 * x * (1.0 - t**2) * u_prime
+    return (0.5 * (1.0 + t) + 0.5 * x * (1.0 - t**2) * u_prime).astype(x.dtype)
 
 
 def mse_loss(output, expected):
@@ -119,7 +119,37 @@ def vectorized_cross_entropy_loss(output, expected):
     return loss
 
 def vectorized_softmax_cross_entropy_derivative(output, expected):
-    return (output - expected) / output.shape[1]
+    return (output - expected) / output.dtype.type(output.shape[1])
+
+def vectorized_cross_entropy_loss_integer(output, expected):
+    output_clipped = np.clip(output, 1e-12, 1 - 1e-12)
+
+    batch_size = output_clipped.shape[0]
+    time_steps = output_clipped.shape[1]
+
+    correct_probs = output_clipped[
+        np.arange(batch_size)[:, None],
+        np.arange(time_steps)[None, :],
+        expected
+    ]
+
+    loss = -np.sum(np.log(correct_probs)) / time_steps
+    return loss
+
+
+def vectorized_softmax_cross_entropy_derivative_integer(output, expected):
+    derivative = output.copy()
+
+    batch_size = output.shape[0]
+    time_steps = output.shape[1]
+
+    derivative[
+        np.arange(batch_size)[:, None],
+        np.arange(time_steps)[None, :],
+        expected
+    ] -= output.dtype.type(1)
+
+    return derivative / output.dtype.type(time_steps)
 
 
 def cross_entropy_loss(output, expected):
@@ -167,7 +197,7 @@ def yolo_out_softmax_classes_derivative(x):
 
 # Lambda parameters define scale of individual loss components
 # Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, h, w, classes))
-def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=1.0, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=2.0, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
@@ -194,7 +224,7 @@ def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=1.0
     return np.sum(lambda_obj * obj_loss + lambda_noobj * noobj_loss + lambda_box * box_loss + lambda_class * class_loss)
 
 
-def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=1.0, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=2.0, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
@@ -237,6 +267,7 @@ cross_entropy_softmax = Activation(f_softmax, f_derivative)
 vectorized_cross_entropy_softmax = Activation(softmax_vectorized, f_derivative)
 softmax_cross_entropy = Loss(cross_entropy_loss, softmax_cross_entropy_loss_derivative)
 vectorized_softmax_cross_entropy = Loss(vectorized_cross_entropy_loss, vectorized_softmax_cross_entropy_derivative)
+vectorized_softmax_cross_entropy_integer = Loss(vectorized_cross_entropy_loss_integer, vectorized_softmax_cross_entropy_derivative_integer)
 
 yolo_activation = Activation(yolo_out_softmax_classes, yolo_out_softmax_classes_derivative)
 yolo_loss = Loss(yolo_loss_softmax_classes, yolo_loss_softmax_classes_derivative)

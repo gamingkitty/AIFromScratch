@@ -38,10 +38,11 @@ def main():
         model_functions.softmax_cross_entropy,
         (1, 28, 28),
         [
-            # layers.Reshape((1, 28, 28)),
-            # # layers.Convolution(64, (3, 3), model_functions.relu),
-            # # layers.MaxPooling((2, 2), 2),
-            # layers.Convolution(32, (3, 3), model_functions.relu),
+            layers.Reshape((1, 28, 28)),
+            layers.Convolution(64, (3, 3), model_functions.relu),
+            layers.MaxPooling((2, 2), 2),
+            layers.Transpose((0, 2, 1)),
+            layers.Convolution(32, (3, 3), model_functions.relu),
             # # layers.MaxPooling((2, 2), 2),
             # layers.Convolution(64, (3, 3), model_functions.relu, stride=2),
 

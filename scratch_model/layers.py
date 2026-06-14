@@ -4,11 +4,15 @@ import time
 from scratch_model import optimizers
 
 
-attention_time = 0
-dense_time = 0
-layer_norm_time = 0
-positional_time = 0
-dropout_time = 0
+forward_attention = 0
+backward_attention = 0
+update_attention = 0
+forward_dense = 0
+backward_dense = 0
+update_dense = 0
+forward_norm = 0
+backward_norm = 0
+update_norm = 0
 
 
 def get_windows(window_shape, matrix, stride=1):
@@ -676,7 +680,7 @@ class Stack:
 
 
 class Attention:
-    def __init__(self, value_size, query_key_size, heads, mask=None):
+    def __init__(self, value_size, query_key_size, heads, mask=None, use_rope=True, use_kv_cache=True):
         self.value_size = value_size
         self.query_key_size = query_key_size
 
@@ -703,7 +707,11 @@ class Attention:
         self.key_cache = []
         self.value_cache = []
 
-        self.use_kv_cache = True
+        self.use_kv_cache = use_kv_cache
+        self.use_rope = use_rope
+
+        if self.use_rope and not self.query_key_size % 2 == 0:
+            raise ValueError("RoPE encoding requires query key dimension to be even.")
 
     def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
         in_num = previous_layer_output_shape[1]
@@ -727,6 +735,8 @@ class Attention:
         self.key_optimizer.initialize(self.key_weights, dtype=dtype)
         self.query_optimizer.initialize(self.query_weights, dtype=dtype)
         self.value_optimizer.initialize(self.value_weights, dtype=dtype)
+
+        self.scale = self.scale.astype(dtype)
 
     def clear_cache(self):
         self.key_cache = []
@@ -765,8 +775,30 @@ class Attention:
         z, a = self.forward_pass(prev_layer_activation)
         return a
 
+    @staticmethod
+    def apply_rotation(queries, keys, cos, sin):
+        query_xs = queries[:, :, :, ::2]
+        query_ys = queries[:, :, :, 1::2]
+
+        key_xs = keys[:, :, :, ::2]
+        key_ys = keys[:, :, :, 1::2]
+
+        query_rotated_xs = cos * query_xs - sin * query_ys
+        query_rotated_ys = sin * query_xs + cos * query_ys
+
+        key_rotated_xs = cos * key_xs - sin * key_ys
+        key_rotated_ys = sin * key_xs + cos * key_ys
+
+        queries[:, :, :, ::2] = query_rotated_xs
+        queries[:, :, :, 1::2] = query_rotated_ys
+        keys[:, :, :, ::2] = key_rotated_xs
+        keys[:, :, :, 1::2] = key_rotated_ys
+
+        return queries, keys
+
     def forward_pass(self, prev_layer_activation):
-        # global attention_time
+        # global forward_attention
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
         t = prev_layer_activation.shape[1]
 
@@ -775,14 +807,24 @@ class Attention:
         keys = np.einsum('bti,hiv->bhtv', prev_layer_activation, self.key_weights)
         values = np.einsum('bti,hiv->bhtv', prev_layer_activation, self.value_weights)
 
+        # Rotate query and key vectors using RoPE
+        cos = None
+        sin = None
+        if self.use_rope:
+            angles = np.outer(np.arange(t), np.power(1 / 10000, (2 / self.query_key_size) * np.arange(self.query_key_size // 2)))
+
+            cos = np.cos(angles)[np.newaxis, np.newaxis, :, :]
+            sin = np.sin(angles)[np.newaxis, np.newaxis, :, :]
+
+            queries, keys = self.apply_rotation(queries, keys, cos, sin)
+
         # Dot key and query values to get the attention scores
         # Shape (head, query, key), so each row contains the values of query_i dot all keys,
         # or how much token_i attends to all other tokens
         raw_attention_scores = np.einsum('bhtv,bhsv->bhts', queries, keys) * self.scale
-
         if self.mask is not None:
             mask = self.mask(t)
-            raw_attention_scores = np.where(mask, raw_attention_scores, -1e9)
+            raw_attention_scores = np.where(mask, raw_attention_scores, np.finfo(prev_layer_activation.dtype).min)
 
         # Softmax attention scores along key axis
         e_xs = np.exp(raw_attention_scores - np.max(raw_attention_scores, axis=-1, keepdims=True))
@@ -798,14 +840,17 @@ class Attention:
         # Concatenate the heads
         output = output.transpose(0, 2, 1, 3).reshape(output.shape[0], output.shape[2], -1)
 
-        # attention_time += time.perf_counter() - t0
+        # np.cuda.Stream.null.synchronize()
+        #
+        # forward_attention += time.perf_counter() - t0
 
-        return (queries, keys, values, attention_scores), output
+        return (queries, keys, values, attention_scores, cos, sin), output
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # global attention_time
+        # global backward_attention
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
-        queries, keys, values, attention_scores = this_layer_z
+        queries, keys, values, attention_scores, cos, sin = this_layer_z
         b = prev_layer_a.shape[0]
         t = prev_layer_a.shape[1]
 
@@ -837,14 +882,23 @@ class Attention:
         dc_dquery = np.einsum('bhst,bhtk->bhsk', dc_draw, keys * self.scale)
         dc_dkey = np.einsum('bhts,bhtk->bhsk', dc_draw, queries * self.scale)
 
+        # Rotate opposite direction as in forward pass
+        if self.use_rope:
+            dc_dquery, dc_dkey = self.apply_rotation(dc_dquery, dc_dkey, cos, -sin)
+
         self.query_gradient += np.einsum('bti,bhtq->hiq', prev_layer_a, dc_dquery)
         self.key_gradient += np.einsum('bti,bhtk->hik', prev_layer_a, dc_dkey)
 
         new_dc_da = np.sum(np.einsum('bhtv,hiv->bhti', dc_dv, self.value_weights) + np.einsum('bhtq,hiq->bhti', dc_dquery, self.query_weights) + np.einsum('bhtk,hik->bhti', dc_dkey, self.key_weights), axis=1)
-        # attention_time += time.perf_counter() - t0
+
+        # np.cuda.Stream.null.synchronize()
+        # backward_attention += time.perf_counter() - t0
         return new_dc_da
 
     def update_weights(self, learning_rate, grad_scale):
+        # global update_attention
+        # np.cuda.Stream.null.synchronize()
+        # t0 = time.perf_counter()
         self.value_optimizer.update_weights(self.value_gradient * grad_scale, learning_rate)
         self.query_optimizer.update_weights(self.query_gradient * grad_scale, learning_rate)
         self.key_optimizer.update_weights(self.key_gradient * grad_scale, learning_rate)
@@ -852,6 +906,8 @@ class Attention:
         self.value_gradient.fill(0.0)
         self.query_gradient.fill(0.0)
         self.key_gradient.fill(0.0)
+        # np.cuda.Stream.null.synchronize()
+        # update_attention += time.perf_counter() - t0
 
     def get_output_shape(self):
         return self.output_shape
@@ -860,7 +916,7 @@ class Attention:
         return np.prod(self.value_weights.shape) + np.prod(self.query_weights.shape) + np.prod(self.key_weights.shape)
 
     def get_norm(self):
-        return np.sum(self.value_gradient * self.value_gradient) + np.sum(self.query_gradient * self.query_gradient) + np.sum(self.value_gradient * self.value_gradient)
+        return np.sum(self.value_gradient * self.value_gradient) + np.sum(self.query_gradient * self.query_gradient) + np.sum(self.key_gradient * self.key_gradient)
 
 
 # Must take in vectorized activation function
@@ -906,40 +962,52 @@ class TimeDistributedDense:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
-        # global dense_time
-        # t0 = time.perf_counter()
-        z_data = np.dot(prev_layer_activation, self.weights)
-        z_data += self.biases
+        # Reshape to 2d for faster GPU training
+        original_shape = prev_layer_activation.shape
+        prev_layer_2d = np.reshape(prev_layer_activation, (-1, self.weights.shape[0]))
+
+        z_data = np.reshape(np.dot(prev_layer_2d, self.weights) + self.biases, (*original_shape[:-1], self.neuron_num))
+
         if self.has_activation:
             a_data = self.activation_function(z_data)
         else:
             a_data = z_data
 
-        # dense_time += time.perf_counter() - t0
-        return z_data, a_data
+        return (z_data, prev_layer_2d), a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # global dense_time
+        # global backward_dense
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        z_data, prev_layer_2d = this_layer_z
         if not self.has_activation:
             dc_dz = dc_da
         elif self.activation_function.is_elementwise:
-            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+            dc_dz = dc_da * self.activation_function.derivative(z_data)
         else:
-            dc_dz = np.einsum('bti,btio->bto', dc_da, self.activation_function.derivative(this_layer_z))
-        self.gradient += np.einsum('bti,bto->io', prev_layer_a, dc_dz) # np.dot(prev_layer_a.T, dc_dz)
-        self.bias_gradient += np.sum(dc_dz, axis=(0, 1))
+            dc_dz = np.einsum('bti,btio->bto', dc_da, self.activation_function.derivative(z_data))
 
-        dc_da = np.dot(dc_dz, self.weights.T)
-        # dense_time += time.perf_counter() - t0
-        return dc_da
+        dc_dz_2d = np.reshape(dc_dz, (-1, dc_dz.shape[-1]))
+
+        self.gradient += np.dot(prev_layer_2d.T, dc_dz_2d)
+        self.bias_gradient += np.sum(dc_dz_2d, axis=0)
+
+        new_dc_da = np.reshape(np.dot(dc_dz_2d, self.weights.T), prev_layer_a.shape)
+        # np.cuda.Stream.null.synchronize()
+        # backward_dense += time.perf_counter() - t0
+        return new_dc_da
 
     def update_weights(self, learning_rate, grad_scale=1):
+        # global update_dense
+        # np.cuda.Stream.null.synchronize()
+        # t0 = time.perf_counter()
         self.weight_optimizer.update_weights(self.gradient * grad_scale, learning_rate)
         self.bias_optimizer.update_weights(self.bias_gradient * grad_scale, learning_rate)
 
         self.gradient.fill(0.0)
         self.bias_gradient.fill(0.0)
+        # np.cuda.Stream.null.synchronize()
+        # update_dense += time.perf_counter() - t0
 
     def get_output_shape(self):
         return self.output_shape
@@ -1134,7 +1202,8 @@ class LayerNorm:
         return a
 
     def forward_pass(self, prev_layer_activation):
-        # global layer_norm_time
+        # global forward_norm
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
         dif_mean = (prev_layer_activation - prev_layer_activation.mean(axis=self.axis, keepdims=True))
         var = (dif_mean * dif_mean).mean(axis=self.axis, keepdims=True)
@@ -1144,16 +1213,20 @@ class LayerNorm:
 
         out = (self.weights * quotient) + self.biases
 
-        # layer_norm_time += time.perf_counter() - t0
+        # np.cuda.Stream.null.synchronize()
+        # forward_norm += time.perf_counter() - t0
         return (inv_std, quotient), out
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # global layer_norm_time
+        # global backward_norm
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
         inv_std, quotient = this_layer_z
 
-        self.weights_gradient += np.sum(quotient * dc_da, axis=tuple(range(dc_da.ndim - len(self.axis))))
-        self.biases_gradient += np.sum(dc_da, axis=tuple(range(dc_da.ndim - len(self.axis))))
+        param_axis = tuple(i for i in range(dc_da.ndim) if i not in self.axis)
+
+        self.weights_gradient += np.sum(quotient * dc_da, axis=param_axis)
+        self.biases_gradient += np.sum(dc_da, axis=param_axis)
 
         g = dc_da * self.weights
 
@@ -1161,15 +1234,22 @@ class LayerNorm:
         # Equivalent but slightly faster version
         new_dc_da = (g - g.mean(axis=self.axis, keepdims=True) - quotient * (g * quotient).mean(axis=self.axis, keepdims=True)) * inv_std
 
-        # layer_norm_time += time.perf_counter() - t0
+        # np.cuda.Stream.null.synchronize()
+        # backward_norm += time.perf_counter() - t0
         return new_dc_da
 
     def update_weights(self, learning_rate, grad_scale=1):
+        # global update_norm
+        # np.cuda.Stream.null.synchronize()
+        # t0 = time.perf_counter()
         self.weights_optimizer.update_weights(self.weights_gradient * grad_scale, learning_rate)
         self.bias_optimizer.update_weights(self.biases_gradient * grad_scale, learning_rate)
 
         self.weights_gradient.fill(0.0)
         self.biases_gradient.fill(0.0)
+
+        # np.cuda.Stream.null.synchronize()
+        # update_norm += time.perf_counter() - t0
 
     def get_output_shape(self):
         return self.output_shape
@@ -1203,11 +1283,12 @@ class PositionalEncoder:
         t = prev_layer_activation.shape[1]
         e = prev_layer_activation.shape[2]
 
-        positional_encodings = np.zeros(prev_layer_activation.shape)
+        positional_encodings = np.zeros(prev_layer_activation.shape, dtype=prev_layer_activation.dtype)
         positional_encodings[:, :, 0::2] = np.sin(np.outer(np.arange(p, t + p), np.power(10000, -(2 / e) * np.arange((e + 1) // 2))))
         positional_encodings[:, :, 1::2] = np.cos(np.outer(np.arange(p, t + p), np.power(10000, -(2 / e) * np.arange(e // 2))))
 
         # positional_time += time.perf_counter() - t0
+
         return None, prev_layer_activation + positional_encodings
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
@@ -1261,37 +1342,49 @@ class EmbeddingTiedOutput:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
-        # global dense_time
-        # t0 = time.perf_counter()
-        z_data = np.dot(prev_layer_activation, self.weights)
-        z_data += self.biases
+        # Reshape to 2d for faster GPU training
+        original_shape = prev_layer_activation.shape
+        prev_layer_2d = np.reshape(prev_layer_activation, (-1, self.weights.shape[0]))
+
+        z_data = np.reshape(np.dot(prev_layer_2d, self.weights) + self.biases, (*original_shape[:-1], self.neuron_num))
+
         if self.has_activation:
             a_data = self.activation_function(z_data)
         else:
             a_data = z_data
 
-        # dense_time += time.perf_counter() - t0
-        return z_data, a_data
+        return (z_data, prev_layer_2d), a_data
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
-        # global dense_time
+        # global backward_dense
+        # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        z_data, prev_layer_2d = this_layer_z
         if not self.has_activation:
             dc_dz = dc_da
         elif self.activation_function.is_elementwise:
-            dc_dz = dc_da * self.activation_function.derivative(this_layer_z)
+            dc_dz = dc_da * self.activation_function.derivative(z_data)
         else:
-            dc_dz = np.einsum('bti,btio->bto', dc_da, self.activation_function.derivative(this_layer_z))
-        self.embedding_gradient += np.einsum('bti,bto->oi', prev_layer_a, dc_dz)
-        self.bias_gradient += np.sum(dc_dz, axis=(0, 1))
+            dc_dz = np.einsum('bti,btio->bto', dc_da, self.activation_function.derivative(z_data))
 
-        dc_da = np.dot(dc_dz, self.weights.T)
-        # dense_time += time.perf_counter() - t0
-        return dc_da
+        dc_dz_2d = np.reshape(dc_dz, (-1, dc_dz.shape[-1]))
+
+        self.embedding_gradient += np.dot(dc_dz_2d.T, prev_layer_2d)
+        self.bias_gradient += np.sum(dc_dz_2d, axis=0)
+
+        new_dc_da = np.reshape(np.dot(dc_dz_2d, self.weights.T), prev_layer_a.shape)
+        # np.cuda.Stream.null.synchronize()
+        # backward_dense += time.perf_counter() - t0
+        return new_dc_da
 
     def update_weights(self, learning_rate, grad_scale=1):
+        # global update_dense
+        # np.cuda.Stream.null.synchronize()
+        # t0 = time.perf_counter()
         self.bias_optimizer.update_weights(self.bias_gradient * grad_scale, learning_rate)
         self.bias_gradient.fill(0.0)
+        # np.cuda.Stream.null.synchronize()
+        # update_dense += time.perf_counter() - t0
 
     def get_output_shape(self):
         return self.output_shape

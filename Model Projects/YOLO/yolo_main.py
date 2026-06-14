@@ -21,7 +21,7 @@ def get_data(batches):
 
         # Batch, spatial_h, spatial_w, anchors, output
         # Output: (o, x, y, h, w, *classes)
-        label = cp.zeros((len(imgs), out_h, out_w, 3, 85), dtype=cp.float32)
+        label = cp.zeros((len(imgs), out_h, out_w, 1, 85), dtype=cp.float32)
 
         for b in range(len(boxes)):
             img_boxes = boxes[b]
@@ -40,13 +40,14 @@ def get_data(batches):
                 rel_y = cell_y - spatial_y
 
                 # Anchors: 0: Wide 1: Square 2: Tall
-                anchor = 1
+                # Only one anchor now actually
+                anchor = 0
 
-                aspect_ratio = h / w
-                if aspect_ratio <= 0.75:
-                    anchor = 0
-                elif aspect_ratio >= 1.333:
-                    anchor = 2
+                # aspect_ratio = h / w
+                # if aspect_ratio <= 0.75:
+                #     anchor = 0
+                # elif aspect_ratio >= 1.333:
+                #     anchor = 2
 
                 out = label[b][spatial_y][spatial_x][anchor]
 
@@ -209,41 +210,41 @@ def main():
     epochs = 100
     batch_size = 4
 
-    # ai_model = Model(
-    #     model_functions.yolo_loss,
-    #     (3, -1, -1),
-    #     [
-    #         conv(32, 3, 1),
-    #
-    #         conv(64, 3, 2), *csp_block(64, num_inner_convs=1),
-    #         conv(128, 3, 2), *csp_block(128, num_inner_convs=2),
-    #         conv(256, 3, 2), *csp_block(256, num_inner_convs=3),
-    #         conv(512, 3, 2), *csp_block(512, num_inner_convs=3),
-    #         conv(1024, 3, 2), *csp_block(1024, num_inner_convs=2),
-    #
-    #         conv(512, 3, 1),
-    #
-    #         layers.Convolution(3 * (80 + 5), (1, 1)),
-    #
-    #         # Reshape and transpose to output shape: (in_h / 32, in_2 / 32, 3, 85)
-    #         layers.ReshapeOnAxis((3, 85), axis=0),
-    #         layers.Transpose((2, 3, 0, 1)),
-    #         # Apply activation function
-    #         layers.ActivationFunction(model_functions.yolo_activation)
-    #     ],
-    #     optimizer=optimizers.Adam,
-    #     optimizer_args=(0.9, 0.999),
-    #     dtype=cp.float32,
-    # )
-    ai_model = Model.load("Models/coco_yolo_v2_e1_21760")
+    ai_model = Model(
+        model_functions.yolo_loss,
+        (3, -1, -1),
+        [
+            conv(32, 3, 1),
+
+            conv(64, 3, 2), *csp_block(64, num_inner_convs=1),
+            conv(128, 3, 2), *csp_block(128, num_inner_convs=2),
+            conv(256, 3, 2), *csp_block(256, num_inner_convs=3),
+            conv(512, 3, 2), *csp_block(512, num_inner_convs=3),
+            conv(1024, 3, 2), *csp_block(1024, num_inner_convs=2),
+
+            conv(512, 3, 1),
+
+            layers.Convolution(1 * (80 + 5), (1, 1)),
+
+            # Reshape and transpose to output shape: (in_h / 32, in_2 / 32, 3, 85)
+            layers.ReshapeOnAxis((1, 85), axis=0),
+            layers.Transpose((2, 3, 0, 1)),
+            # Apply activation function
+            layers.ActivationFunction(model_functions.yolo_activation)
+        ],
+        optimizer=optimizers.Adam,
+        optimizer_args=(0.9, 0.999),
+        dtype=cp.float32,
+    )
+    # ai_model = Model.load("Models/coco_yolo_v2_e1_21760")
 
     print(f"Param num: {ai_model.get_param_num()}")
 
-    model_name = "coco_yolo_v2"
+    model_name = "coco_yolo_v3"
     data_path = f"Data/{model_name}"
 
-    current_epoch = 1
-    total_batches = 51418
+    current_epoch = 0
+    total_batches = 0
     while current_epoch < epochs:
         loader = COCOBucketBatchLoader(
             image_dir="coco2017/train2017",
@@ -256,10 +257,7 @@ def main():
 
         print(f"Num batches: {loader.get_batch_num()}")
 
-        if current_epoch == 1:
-            batch_index = 51418 - 29658
-        else:
-            batch_index = 0
+        batch_index = 0
 
         step = 64
         end = batch_index + step
@@ -278,7 +276,7 @@ def main():
                 data,
                 labels,
                 1,
-                0.00002,
+                0.0005,
                 batch_size=batch_size,
                 start_step=total_batches,
                 is_pre_batched=True,

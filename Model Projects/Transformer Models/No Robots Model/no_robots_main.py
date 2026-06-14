@@ -9,3 +9,4 @@ test_data = dataset["test"]
 
 # Print one example
 print(len(test_data))
+print(train_data[0])

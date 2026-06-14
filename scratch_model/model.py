@@ -7,10 +7,14 @@ from scratch_model import layers
 from scratch_model import optimizers
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 
 
 def default_accuracy(prediction, label):
-    return np.sum((np.argmax(prediction, axis=-1) == np.argmax(label, axis=-1)))
+    pred_classes = prediction.argmax(axis=-1)
+    true_classes = label.argmax(axis=-1)
+
+    return int((pred_classes == true_classes).sum().item())
 
 
 def default_learning_rate(step):
@@ -35,6 +39,7 @@ class Model:
 
         self.output_shape = prev_output_shape
         self.output_num = np.prod(prev_output_shape)
+        self.dtype = dtype
 
         self.steps = []
         self.loss_data = []
@@ -58,8 +63,12 @@ class Model:
 
         last_value = input_data
         for i in range(len(self.layers)):
+            # print(self.layers[i])
+            # print(last_value.dtype)
             z_data_current, a_data_current = self.layers[i].forward_pass(last_value)
             last_value = a_data_current
+            # print(last_value.dtype)
+            # print()
             a_data.append(a_data_current)
             z_data.append(z_data_current)
 
@@ -87,6 +96,7 @@ class Model:
         data_augmentation_function=None,
         data_save_file=None,
         steps_to_update_weights=1,
+        end_update_weights=True,
     ):
         if console_updates:
             print("Training model...")
@@ -114,7 +124,7 @@ class Model:
             total_loss = 0
             total_correct = 0
             total_examples = 0
-            # last_time = time.perf_counter()
+            last_time = time.perf_counter()
             update_counter = 0
             update_batch_total = 0
             for j in range(len(data_batches)):
@@ -140,49 +150,32 @@ class Model:
                 update_counter += 1
 
                 if update_counter >= steps_to_update_weights:
-                    norm_sqr = 0
-                    for layer in self.layers:
-                        n = layer.get_norm()
-                        norm_sqr += n
-
-                    norm = np.sqrt(norm_sqr) / update_batch_total
-                    scale = 1
-
-                    if norm > self.clip:
-                        scale = (self.clip / norm)
-
-                    for layer in self.layers:
-                        layer.update_weights(learning_rate * learning_rate_function(cur_step), grad_scale=scale / update_batch_total)
+                    self.update_weights(learning_rate * learning_rate_function(cur_step), update_batch_total)
 
                     update_counter = 0
                     update_batch_total = 0
 
                 total_examples += batch_len
 
-                # if (j + 1) % 10 == 0 and console_updates:
-                #     t = time.perf_counter()
-                #     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
-                #     last_time = t
-                    # print(f"Attention Time: {layers.attention_time}")
-                    # print(f"Dense Time: {layers.dense_time}")
-                    # print(f"Norm Time: {layers.layer_norm_time}")
-                    # print(f"Positional Time: {layers.positional_time}")
-                    # print(f"Dropout Time: {layers.dropout_time}")
+                if (j + 1) % 1 == 0:
+                    t = time.perf_counter()
+                    print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
+                    # print(f"Attention Time: Forward: {layers.forward_attention}, Backward: {layers.backward_attention}, Update: {layers.update_attention}")
+                    # print(f"Dense Time: Forward: {layers.forward_dense}, Backward: {layers.backward_dense}, Update: {layers.update_dense}")
+                    # print(f"Norm Time: Forward: {layers.forward_norm}, Backward: {layers.backward_norm}, Update: {layers.update_norm}")
+                    # layers.forward_attention = 0
+                    # layers.backward_attention = 0
+                    # layers.update_attention = 0
+                    # layers.forward_dense = 0
+                    # layers.backward_dense = 0
+                    # layers.update_dense = 0
+                    # layers.forward_norm = 0
+                    # layers.backward_norm = 0
+                    # layers.update_norm = 0
+                    last_time = t
 
-            if update_counter > 0:
-                norm_sqr = 0
-                for layer in self.layers:
-                    n = layer.get_norm()
-                    norm_sqr += n
-
-                norm = np.sqrt(norm_sqr) / update_batch_total
-                scale = 1
-
-                if norm > self.clip:
-                    scale = self.clip / norm
-
-                for layer in self.layers:
-                    layer.update_weights(learning_rate * learning_rate_function(((i + 1) * num_batches) + start_step), grad_scale=scale / update_batch_total)
+            if update_counter > 0 and end_update_weights:
+                self.update_weights(learning_rate * learning_rate_function(((i + 1) * num_batches) + start_step), update_batch_total)
 
             if data_save_file is not None:
                 self.save_csv(data_save_file)
@@ -194,6 +187,21 @@ class Model:
                 print(f"Finished epoch {i + 1} with an average loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy.")
         if console_updates:
             print("Finished training model.")
+
+    def update_weights(self, learning_rate, batches_since_update):
+        norm_sqr = 0
+        for layer in self.layers:
+            n = layer.get_norm()
+            norm_sqr += n
+
+        norm = np.sqrt(norm_sqr) / batches_since_update
+        scale = 1
+
+        if norm > self.clip:
+            scale = self.clip / norm
+
+        for layer in self.layers:
+            layer.update_weights(learning_rate, grad_scale=scale / batches_since_update)
 
     def test(self, data, labels, accuracy_function=default_accuracy):
         prediction = self.predict(data)
@@ -263,3 +271,29 @@ class Model:
         self.steps = merged["step"].astype(int).tolist()
         self.loss_data = merged["loss"].tolist()
         self.accuracy_data = merged["accuracy"].tolist()
+
+    @classmethod
+    def plot_csv(cls, path, ema_span=100):
+        df = pd.read_csv(path).sort_values("step").reset_index(drop=True)
+
+        df["ema_loss"] = df["loss"].ewm(span=ema_span, adjust=False).mean()
+
+        print((df["ema_loss"][len(df["ema_loss"]) - 1] - df["ema_loss"][len(df["ema_loss"]) - 30001]) / 30000)
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 4))
+
+        axes[0].plot(df["step"], df["loss"], label="loss")
+        axes[0].plot(df["step"], df["ema_loss"], label=f"ema_loss (span={ema_span})")
+        axes[0].set_xlabel("step")
+        axes[0].set_ylabel("loss")
+        axes[0].set_title("Loss vs Step")
+        axes[0].legend()
+
+        axes[1].plot(df["step"], df["accuracy"], label="accuracy")
+        axes[1].set_xlabel("step")
+        axes[1].set_ylabel("accuracy")
+        axes[1].set_title("Accuracy vs Step")
+        axes[1].legend()
+
+        fig.tight_layout()
+        plt.show()

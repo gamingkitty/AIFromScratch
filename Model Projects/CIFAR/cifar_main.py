@@ -1,4 +1,5 @@
 from keras.datasets import cifar10
+import cupy as cp
 import numpy as np
 import math
 
@@ -43,51 +44,106 @@ def lr_percent_cosine_step(step, total_steps=1563*40, warmup_steps=1000, min_per
     return min_percent + (1.0 - min_percent) * cosine
 
 
+def conv(channels, kernel_size, stride):
+    return layers.Convolution(
+        channels,
+        (kernel_size, kernel_size),
+        activation_function=model_functions.relu,
+        padding=kernel_size // 2,
+        stride=stride
+    )
+
+
+def csp_block(channels, num_inner_convs=2, split_ratio=0.5):
+    split_channels = int(channels * split_ratio)
+    other_channels = channels - split_channels
+
+    before_layers = (
+        [conv(split_channels, 1, 1)] +
+        [conv(split_channels, 3, 1) for _ in range(num_inner_convs)]
+    )
+
+    after_layers = [conv(other_channels, 1, 1)]
+
+    return [
+        conv(channels, 1, 1),
+        layers.Split(
+            before_layers=before_layers,
+            after_layers=after_layers,
+            axis=0,
+            partition=split_channels
+        ),
+        conv(channels, 1, 1),
+    ]
+
+
 def main():
     train_labels = np.eye(10)[tr_labels]
     test_labels = np.eye(10)[te_labels]
 
-    ai_model = Model(
-        model_functions.softmax_cross_entropy,
-        (3, 32, 32),
-        [
-            layers.Convolution(32, (3, 3), model_functions.relu, padding=1),
-            layers.Convolution(32, (3, 3), model_functions.relu, padding=1),
-            layers.MaxPooling((2, 2), 2),
+    # ai_model = Model(
+    #     model_functions.softmax_cross_entropy,
+    #     (3, 32, 32),
+    #     [
+    #         layers.Convolution(32, (3, 3), model_functions.relu, padding=1),
+    #         layers.Convolution(32, (3, 3), model_functions.relu, padding=1),
+    #         layers.MaxPooling((2, 2), 2),
+    #
+    #         layers.Dropout(0.2),
+    #
+    #         # layers.LayerNorm(axis=(-3, -2, -1)),
+    #
+    #         layers.Convolution(64, (3, 3), model_functions.relu, padding=1),
+    #         layers.Convolution(64, (3, 3), model_functions.relu, padding=1),
+    #         layers.MaxPooling((2, 2), 2),
+    #
+    #         layers.Dropout(0.3),
+    #
+    #         # layers.LayerNorm(axis=(-3, -2, -1)),
+    #         #
+    #         layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
+    #         layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
+    #         layers.MaxPooling((2, 2), 2),
+    #         # layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
+    #
+    #         # layers.Mean(axis=(-2, -1)),
+    #         layers.Flatten(),
+    #         layers.Dropout(0.4),
+    #
+    #         layers.Dense(128, model_functions.relu),
+    #
+    #         layers.Dropout(0.5),
+    #
+    #         layers.Dense(10, model_functions.cross_entropy_softmax)
+    #     ],
+    #     optimizer=optimizers.AdamW,
+    #     optimizer_args=(0.9, 0.999, 0.0),
+    #     dtype=np.float32,
+    # )
 
-            layers.Dropout(0.2),
+    # ai_model = Model(
+    #     model_functions.softmax_cross_entropy,
+    #     (3, 32, 32),
+    #     [
+    #         conv(32, 3, 1),
+    #
+    #         conv(64, 3, 2), *csp_block(64, num_inner_convs=1),
+    #         conv(128, 3, 2), *csp_block(128, num_inner_convs=2),
+    #         conv(256, 3, 2), *csp_block(256, num_inner_convs=2),
+    #
+    #         conv(128, 3, 1),
+    #
+    #         layers.Flatten(),
+    #
+    #         layers.Dense(128, activation_function=model_functions.relu),
+    #         layers.Dense(10, activation_function=model_functions.cross_entropy_softmax)
+    #     ],
+    #     optimizer=optimizers.Adam,
+    #     optimizer_args=(0.9, 0.999),
+    #     dtype=cp.float32,
+    # )
 
-            # layers.LayerNorm(axis=(-3, -2, -1)),
-
-            layers.Convolution(64, (3, 3), model_functions.relu, padding=1),
-            layers.Convolution(64, (3, 3), model_functions.relu, padding=1),
-            layers.MaxPooling((2, 2), 2),
-
-            layers.Dropout(0.3),
-
-            # layers.LayerNorm(axis=(-3, -2, -1)),
-            #
-            layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
-            layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
-            layers.MaxPooling((2, 2), 2),
-            # layers.Convolution(128, (3, 3), model_functions.relu, padding=1),
-
-            # layers.Mean(axis=(-2, -1)),
-            layers.Flatten(),
-            layers.Dropout(0.4),
-
-            layers.Dense(128, model_functions.relu),
-
-            layers.Dropout(0.5),
-
-            layers.Dense(10, model_functions.cross_entropy_softmax)
-        ],
-        optimizer=optimizers.AdamW,
-        optimizer_args=(0.9, 0.999, 0.0),
-        dtype=np.float32,
-    )
-
-    # ai_model = Model.load("Models/cifar_convolution")
+    ai_model = Model.load("Models/cifar_convolution")
 
     print(f"Param count: {ai_model.get_param_num()}")
 
@@ -102,10 +158,10 @@ def main():
         batch_size=32,
         data_augmentation_function=random_horizontal_flip,
         learning_rate_function=lr_percent_cosine_step,
-        data_save_file="Data/cifar_convolution_7"
+        data_save_file="Data/cifar_convolution_8"
     )
 
-    ai_model.save("Models/cifar_convolution_7")
+    ai_model.save("Models/cifar_convolution_8")
 
     loss, accuracy = ai_model.test(np.array(te_images), test_labels)
     print(f"Final accuracy: {accuracy * 100:.4f}%, final loss: {loss:.6f}")

@@ -63,4 +63,4 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
 
 
 if __name__ == "__main__":
-    plot_training_csv("Data/cifar_convolution_7", ema_span=100)
+    plot_training_csv("Data/cifar_100_v2", ema_span=100)

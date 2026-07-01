@@ -248,6 +248,10 @@ class Model:
         with open(path, "rb") as file:
             return pickle.load(file)
 
+    def set_weights_dtype(self, dtype):
+        for layer in self.layers:
+            layer.set_weights_dtype(dtype)
+
     def save_csv(self, path):
         cur_df = pd.DataFrame({
             "step": self.steps,
@@ -297,3 +301,104 @@ class Model:
 
         fig.tight_layout()
         plt.show()
+
+    def save_weights(self, path):
+        weights = []
+        for layer in self.layers:
+            weights += layer.get_weights()
+        np.savez(path, *weights)
+
+    def save_weights_int8(self, path):
+        import numpy as real_np
+
+        arrays_to_save = {}
+
+        weights = []
+        for layer in self.layers:
+            weights += layer.get_weights()
+
+        arrays_to_save["num_weights"] = real_np.array(len(weights), dtype=real_np.int64)
+
+        for i, w in enumerate(weights):
+            if hasattr(w, "get"):
+                w_np = w.get()
+            else:
+                w_np = real_np.asarray(w)
+
+            original_dtype = str(w_np.dtype)
+            original_shape = real_np.array(w_np.shape, dtype=real_np.int64)
+
+            w_float = w_np.astype(real_np.float32)
+
+            max_abs = real_np.max(real_np.abs(w_float))
+
+            if max_abs == 0:
+                scale = real_np.float32(1.0)
+                q = real_np.zeros_like(w_float, dtype=real_np.int8)
+            else:
+                scale = real_np.float32(max_abs / 127.0)
+                q = real_np.round(w_float / scale)
+                q = real_np.clip(q, -127, 127).astype(real_np.int8)
+
+            arrays_to_save[f"weight_{i}"] = q
+            arrays_to_save[f"scale_{i}"] = real_np.array(scale, dtype=real_np.float32)
+            arrays_to_save[f"shape_{i}"] = original_shape
+            arrays_to_save[f"dtype_{i}"] = real_np.array(original_dtype)
+
+        real_np.savez_compressed(path, **arrays_to_save)
+
+    def load_weights_int8(self, path, dtype=None):
+        import numpy as real_np
+
+        data = real_np.load(path, allow_pickle=True)
+
+        num_weights = int(data["num_weights"])
+        loaded_weights = []
+
+        for i in range(num_weights):
+            q = data[f"weight_{i}"]
+            scale = real_np.float32(data[f"scale_{i}"])
+            shape = tuple(data[f"shape_{i}"])
+
+            if dtype is None:
+                out_dtype = real_np.dtype(str(data[f"dtype_{i}"]))
+            else:
+                out_dtype = dtype
+
+            w = q.astype(real_np.float32) * scale
+            w = w.reshape(shape).astype(out_dtype)
+
+            loaded_weights.append(w)
+
+        weight_index = 0
+
+        for layer in self.layers:
+            old_layer_weights = layer.get_weights()
+            num_layer_weights = len(old_layer_weights)
+
+            new_layer_weights = loaded_weights[
+                weight_index:weight_index + num_layer_weights
+            ]
+
+            # Convert NumPy weights back to CuPy if the current layer uses CuPy weights
+            if num_layer_weights > 0 and hasattr(old_layer_weights[0], "get"):
+                import cupy as cp
+
+                if dtype is None:
+                    target_dtype = old_layer_weights[0].dtype
+                else:
+                    target_dtype = dtype
+
+                new_layer_weights = [
+                    cp.asarray(w, dtype=target_dtype)
+                    for w in new_layer_weights
+                ]
+
+            layer.set_weights(new_layer_weights)
+
+            weight_index += num_layer_weights
+
+        if weight_index != num_weights:
+            raise ValueError(
+                f"Loaded {num_weights} weights, but model used {weight_index}."
+            )

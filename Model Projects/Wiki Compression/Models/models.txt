@@ -2,4 +2,4 @@ v1 - 0.001 weight decay 0.0005 cosine lr, 8192 vocab, 10 blocks, 4x FFN dim, 384
 v2 - 0.0 weight decay 0.0005 cosine lr, 4096 vocab, 12 blocks, 3x FFN dim, 384 model dim, 6 heads, 1024 context, 10 batch, RoPE
 v3 - 0.0 weight decay 0.0002 cosine lr, 8192 vocab, 12 blocks, 3x FFN dim, 384 model dim, 6 heads, 1024 context, 10 batch, RoPE
 v4 - 0.0 weight decay 0.0005 cosine lr, 8192 vocab, 12 blocks, 3x FFN dim, 384 model dim, 6 heads, 2048 context, 4x2 batch, RoPE
-v5 - 0.0 weight decay 0.0005 cosine lr, 8192 vocab, 10 blocks, 4x FFN dim, 384 model dim, 6 heads, 2048 context, 4x2 batch, RoPE
+v5 - 0.0 weight decay 0.0005 cosine lr, 8192 vocab, 10 blocks, 4x FFN dim, 384 model dim, 6 heads, 2048->3072 context, 4x2 batch, RoPE

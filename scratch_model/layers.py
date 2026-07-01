@@ -371,6 +371,15 @@ class Embedding:
     def get_norm(self):
         return np.sum(self.gradient * self.gradient)
 
+    def set_weights_dtype(self, dtype):
+        self.weights = self.weights.astype(dtype)
+
+    def get_weights(self):
+        return [self.weights]
+
+    def set_weights(self, weights):
+        self.weights = weights[0]
+
 
 # Change so that doesnt store self.dz_da
 class Dropout:
@@ -421,7 +430,16 @@ class Dropout:
         return 0
 
     def get_norm(self):
-        return 0
+        pass
+
+    def set_weights_dtype(self, dtype):
+        return
+
+    def get_weights(self):
+        return []
+
+    def set_weights(self, weights):
+        pass
 
 
 # Currently returns entire sequence. Might add option in future to only return final output of layer.
@@ -918,6 +936,19 @@ class Attention:
     def get_norm(self):
         return np.sum(self.value_gradient * self.value_gradient) + np.sum(self.query_gradient * self.query_gradient) + np.sum(self.key_gradient * self.key_gradient)
 
+    def set_weights_dtype(self, dtype):
+        self.key_weights = self.key_weights.astype(dtype)
+        self.query_weights = self.query_weights.astype(dtype)
+        self.value_weights = self.value_weights.astype(dtype)
+
+    def get_weights(self):
+        return [self.key_weights, self.query_weights, self.value_weights]
+
+    def set_weights(self, weights):
+        self.key_weights = weights[0]
+        self.query_weights = weights[1]
+        self.value_weights = weights[2]
+
 
 # Must take in vectorized activation function
 class TimeDistributedDense:
@@ -1017,6 +1048,17 @@ class TimeDistributedDense:
 
     def get_norm(self):
         return np.sum(self.gradient * self.gradient) + np.sum(self.bias_gradient * self.bias_gradient)
+
+    def set_weights_dtype(self, dtype):
+        self.weights = self.weights.astype(dtype)
+        self.biases = self.biases.astype(dtype)
+
+    def get_weights(self):
+        return [self.weights, self.biases]
+
+    def set_weights(self, weights):
+        self.weights = weights[0]
+        self.biases = weights[1]
 
 
 class Sum:
@@ -1166,6 +1208,23 @@ class ResidualBlock:
     def get_norm(self):
         return sum(layer.get_norm() for layer in self.layers)
 
+    def set_weights_dtype(self, dtype):
+        for layer in self.layers:
+            layer.set_weights_dtype(dtype)
+
+    def get_weights(self):
+        weights = []
+        for layer in self.layers:
+            weights += layer.get_weights()
+        return weights
+
+    def set_weights(self, weights):
+        start = 0
+        for layer in self.layers:
+            num_weights = len(layer.get_weights())
+            layer.set_weights(weights[start:start+num_weights])
+            start += num_weights
+
 
 class LayerNorm:
     def __init__(self, axis=(-1,)):
@@ -1259,6 +1318,17 @@ class LayerNorm:
 
     def get_norm(self):
         return np.sum(self.weights_gradient * self.weights_gradient) + np.sum(self.biases_gradient * self.biases_gradient)
+
+    def set_weights_dtype(self, dtype):
+        self.weights = self.weights.astype(dtype)
+        self.biases = self.biases.astype(dtype)
+
+    def get_weights(self):
+        return [self.weights, self.biases]
+
+    def set_weights(self, weights):
+        self.weights = weights[0]
+        self.biases = weights[1]
 
 
 class PositionalEncoder:
@@ -1394,6 +1464,17 @@ class EmbeddingTiedOutput:
 
     def get_norm(self):
         return np.sum(self.bias_gradient * self.bias_gradient)
+
+    # Decouples from embedding layer
+    def set_weights_dtype(self, dtype):
+        self.weights = self.weights.astype(dtype)
+        self.biases = self.biases.astype(dtype)
+
+    def get_weights(self):
+        return [self.biases]
+
+    def set_weights(self, weights):
+        self.biases = weights[0]
 
 
 class Transpose:
@@ -1661,3 +1742,90 @@ class Split:
 
     def get_norm(self):
         return sum(layer.get_norm() for layer in self.all_layers)
+
+
+class Parallel:
+    def __init__(self, layers_list):
+        self.layers_list = layers_list
+        self.output_shape = None
+
+    # Expects previous_layer_output_shape to be a list of tuples
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+        if len(previous_layer_output_shape) != len(self.layers_list):
+            raise ValueError("Parallel requires one input shape per branch.")
+
+        total_out_shape = None
+        for i, layers in enumerate(self.layers_list):
+            out_shape = previous_layer_output_shape[i]
+            for layer in layers:
+                layer.init_weights(out_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+                out_shape = layer.get_output_shape()
+
+            if total_out_shape is not None and out_shape != total_out_shape:
+                raise ValueError("Not all layers have the same output shape in Parallel layer so they could not be concatenated.")
+
+            total_out_shape = out_shape
+
+        self.output_shape = (len(self.layers_list), *total_out_shape)
+
+    def predict(self, prev_layer_activation):
+        total_out = []
+        for i, layers in enumerate(self.layers_list):
+            last_layer_out = prev_layer_activation[i]
+            for layer in layers:
+                last_layer_out = layer.predict(last_layer_out)
+            total_out.append(last_layer_out)
+        return np.stack(total_out, axis=1)
+
+    def forward_pass(self, prev_layer_activation):
+        total_z_data = []
+        total_a_data = []
+
+        out = []
+
+        for j in range(len(self.layers_list)):
+            layers = self.layers_list[j]
+            last_value = prev_layer_activation[j]
+            z_data = []
+            a_data = [last_value]
+            for i in range(len(layers)):
+                z_data_current, a_data_current = layers[i].forward_pass(last_value)
+                last_value = a_data_current
+                a_data.append(a_data_current)
+                z_data.append(z_data_current)
+            total_z_data.append(z_data)
+            total_a_data.append(a_data)
+            out.append(a_data[-1])
+
+        return (total_z_data, total_a_data), np.stack(out, axis=1)
+
+    def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
+        total_dc_da = []
+        total_z_data, total_a_data = this_layer_z
+        for j in range(len(self.layers_list)):
+            layers = self.layers_list[j]
+            a_data = total_a_data[j]
+            z_data = total_z_data[j]
+            current_dc_da = dc_da[:, j]
+            for i in reversed(range(len(layers))):
+                current_dc_da = layers[i].backwards_pass(a_data[i], z_data[i], current_dc_da)
+            total_dc_da.append(current_dc_da)
+        return total_dc_da
+
+    def update_weights(self, learning_rate, grad_scale=1):
+        for layers in self.layers_list:
+            for layer in layers:
+                layer.update_weights(learning_rate, grad_scale=grad_scale)
+
+    def get_output_shape(self):
+        return self.output_shape
+
+    def count_params(self):
+        param_num = 0
+        for layers in self.layers_list:
+            for layer in layers:
+                param_num += layer.count_params()
+        return param_num
+
+    def get_norm(self):
+        return sum(sum(layer.get_norm() for layer in layers) for layers in self.layers_list)

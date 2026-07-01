@@ -228,7 +228,7 @@ def to_one_hot(indices, vocab_size):
     return y
 
 
-def lr_percent_cosine_step(step, total_steps=500000, warmup_steps=2000, min_percent=0.05):
+def lr_percent_cosine_step(step, total_steps=1000000, warmup_steps=2000, min_percent=0.05):
     if total_steps <= 1:
         return 1.0
 
@@ -267,9 +267,9 @@ def accuracy(prediction, label):
 
 if __name__ == "__main__":
     vocab_size = 8192
-    batch_size = 4
-    context_length = 2048
-    learning_rate = 0.0005
+    batch_size = 2
+    context_length = 3072
+    learning_rate = 0.00035
 
     d_model = 384
     feed_forward_dimension = 4 * d_model
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     #     dtype=cp.float32
     # )
 
-    language_model = Model.load("Models/compression_model_v5_82267")
+    language_model = Model.load("Models/compression_model_v5_185000")
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     print(f"Param num: {language_model.get_param_num()}")
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         vocab_size=vocab_size,
     )
 
-    step = 82267
+    step = 185000
 
     version = "v5"
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     # print(tokenizer.decode(pred))
 
     try:
-        for i in range(500000):
+        for i in range(1000000):
             batched_data, batched_labels = get_random_token_batch(
                 tokens,
                 batch_size=batch_size,
@@ -352,11 +352,11 @@ if __name__ == "__main__":
                 console_updates=False,
                 steps_to_update_weights=99,
                 end_update_weights=False,
-                data_save_file=f"Loss/compression_model_{version}_data"
+                data_save_file=f"Loss/compression_model_{version}_data.csv"
             )
 
-            if (step + 1) % 2 == 0:
-                language_model.update_weights(learning_rate * lr_percent_cosine_step(step), batch_size * 2)
+            if (step + 1) % 4 == 0:
+                language_model.update_weights(learning_rate * lr_percent_cosine_step(step), batch_size * 4)
 
             step += 1
 

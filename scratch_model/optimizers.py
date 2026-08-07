@@ -26,7 +26,11 @@ class Adam:
         self.b1_pow = 1
         self.b2_pow = 1
 
+    def set_weights(self, weights):
+        self.weights = weights
+
     def update_weights(self, gradient, learning_rate):
+        gradient = gradient.astype(self.m.dtype, copy=False)
         self.m *= self.b1
         self.m += (1.0 - self.b1) * gradient
 
@@ -39,7 +43,7 @@ class Adam:
 
         m_hat = self.m / (1 - self.b1_pow)
         v_hat = self.v / (1 - self.b2_pow)
-        self.weights -= learning_rate * (m_hat / (np.sqrt(v_hat) + self.epsilon))
+        self.weights -= (learning_rate * (m_hat / (np.sqrt(v_hat) + self.epsilon))).astype(self.weights.dtype, copy=False)
 
 
 class AdamW:
@@ -52,6 +56,10 @@ class AdamW:
         self.weights = weights
         self.adam.initialize(weights, dtype=dtype)
 
+    def set_weights(self, weights):
+        self.weights = weights
+        self.adam.set_weights(weights)
+
     def update_weights(self, gradient, learning_rate):
         self.weights *= 1 - learning_rate * self.weight_decay
         self.adam.update_weights(gradient, learning_rate)
@@ -62,6 +70,9 @@ class GradientDescent:
         self.weights = None
 
     def initialize(self, weights, dtype=np.float32):
+        self.weights = weights
+
+    def set_weights(self, weights):
         self.weights = weights
 
     def update_weights(self, gradient, learning_rate):

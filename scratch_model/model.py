@@ -22,7 +22,7 @@ def default_learning_rate(step):
 
 
 class Model:
-    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.Adam, optimizer_args=(), dtype=np.float32):
+    def __init__(self, loss_function, input_shape, model_layers, optimizer=optimizers.Adam, optimizer_args=(), dtype=np.float32, optimizer_dtype=np.float32):
         self.input_shape = input_shape
         self.input_num = np.prod(input_shape)
 
@@ -34,7 +34,7 @@ class Model:
 
         prev_output_shape = input_shape
         for layer in self.layers:
-            layer.init_weights(prev_output_shape, optimizer, optimizer_args=optimizer_args, dtype=dtype)
+            layer.init_weights(prev_output_shape, optimizer, optimizer_args=optimizer_args, dtype=dtype, optimizer_dtype=optimizer_dtype)
             prev_output_shape = layer.get_output_shape()
 
         self.output_shape = prev_output_shape
@@ -78,7 +78,7 @@ class Model:
         dc_da = self.loss.derivative(a_data[-1], expected_output)
         for i in reversed(range(len(self.layers))):
             dc_da = self.layers[i].backwards_pass(a_data[i], z_data[i], dc_da)
-        self.final_dc_da = dc_da
+        # self.final_dc_da = dc_da
 
     def fit(
         self,
@@ -134,18 +134,13 @@ class Model:
 
                 update_batch_total += batch_len
 
-                z_data, a_data = self.forward_propagate(current_batch)
-
-                cur_loss = self.loss(a_data[-1], current_label_batch)
-                cur_correct = accuracy_function(a_data[-1], current_label_batch)
-                self.loss_data.append(cur_loss / batch_len)
-                self.accuracy_data.append(cur_correct / batch_len)
+                cur_loss, cur_accuracy = self.train_batch(current_batch, current_label_batch, accuracy_function=accuracy_function)
                 cur_step = (i * num_batches) + j + start_step
-                self.steps.append(cur_step)
-                total_loss += cur_loss
-                total_correct += cur_correct
 
-                self.backwards_propagate(z_data, a_data, current_label_batch)
+                self.add_data(cur_loss, cur_accuracy, cur_step)
+
+                total_loss += cur_loss
+                total_correct += cur_accuracy * batch_len
 
                 update_counter += 1
 
@@ -160,18 +155,6 @@ class Model:
                 if (j + 1) % 1 == 0:
                     t = time.perf_counter()
                     print(f"So far there is loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy, took {t - last_time:.4f} seconds.")
-                    # print(f"Attention Time: Forward: {layers.forward_attention}, Backward: {layers.backward_attention}, Update: {layers.update_attention}")
-                    # print(f"Dense Time: Forward: {layers.forward_dense}, Backward: {layers.backward_dense}, Update: {layers.update_dense}")
-                    # print(f"Norm Time: Forward: {layers.forward_norm}, Backward: {layers.backward_norm}, Update: {layers.update_norm}")
-                    # layers.forward_attention = 0
-                    # layers.backward_attention = 0
-                    # layers.update_attention = 0
-                    # layers.forward_dense = 0
-                    # layers.backward_dense = 0
-                    # layers.update_dense = 0
-                    # layers.forward_norm = 0
-                    # layers.backward_norm = 0
-                    # layers.update_norm = 0
                     last_time = t
 
             if update_counter > 0 and end_update_weights:
@@ -187,6 +170,28 @@ class Model:
                 print(f"Finished epoch {i + 1} with an average loss of {(total_loss / total_examples):.6f} and {(100 * (total_correct / total_examples)):.4f}% accuracy.")
         if console_updates:
             print("Finished training model.")
+
+    def train_batch(
+        self,
+        batch,
+        batch_label,
+        accuracy_function=default_accuracy,
+    ):
+        batch_len = len(batch)
+
+        z_data, a_data = self.forward_propagate(batch)
+
+        cur_loss = self.loss(a_data[-1], batch_label)
+        cur_correct = accuracy_function(a_data[-1], batch_label)
+
+        self.backwards_propagate(z_data, a_data, batch_label)
+
+        return cur_loss / batch_len, cur_correct / batch_len
+
+    def add_data(self, loss, accuracy, step):
+        self.loss_data.append(loss)
+        self.accuracy_data.append(accuracy)
+        self.steps.append(step)
 
     def update_weights(self, learning_rate, batches_since_update):
         norm_sqr = 0
@@ -252,6 +257,17 @@ class Model:
         for layer in self.layers:
             layer.set_weights_dtype(dtype)
 
+    def set_layer_type_dtype(self, layer_type, dtype):
+        def set_layers(layers_to_set):
+            for layer in layers_to_set:
+                if hasattr(layer, 'layers'):
+                    set_layers(layer.layers)
+                else:
+                    if isinstance(layer, layer_type):
+                        layer.set_weights_dtype(dtype)
+
+        set_layers(self.layers)
+
     def save_csv(self, path):
         cur_df = pd.DataFrame({
             "step": self.steps,
@@ -281,8 +297,6 @@ class Model:
         df = pd.read_csv(path).sort_values("step").reset_index(drop=True)
 
         df["ema_loss"] = df["loss"].ewm(span=ema_span, adjust=False).mean()
-
-        print((df["ema_loss"][len(df["ema_loss"]) - 1] - df["ema_loss"][len(df["ema_loss"]) - 30001]) / 30000)
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 4))
 

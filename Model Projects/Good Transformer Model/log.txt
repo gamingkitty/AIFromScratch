@@ -1,0 +1,1 @@
+Step 22581 - Attempted switch to mixed precision but didn't work. May affect loss slightly on graph?

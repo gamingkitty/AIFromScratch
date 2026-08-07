@@ -72,22 +72,22 @@ class Dense:
 
         self.has_activation = self.activation_function is not None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (self.neuron_num,)
 
         in_num = np.prod(previous_layer_output_shape)
         out_num = self.neuron_num
         weight_limit = math.sqrt(6 / (in_num + out_num))
 
-        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype)
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype, copy=False)
         self.gradient = np.zeros_like(self.weights)
         self.weight_optimizer = optimizer(*optimizer_args)
-        self.weight_optimizer.initialize(self.weights, dtype=dtype)
+        self.weight_optimizer.initialize(self.weights, dtype=optimizer_dtype)
 
         self.biases = np.zeros(out_num)
         self.bias_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=optimizer_dtype)
 
         if optimizer is optimizers.AdamW:
             self.bias_optimizer.weight_decay = 0
@@ -155,7 +155,7 @@ class Convolution:
 
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.true_kernel_shape = (previous_layer_output_shape[0], self.kernel_num, *self.kernel_shape)
         self.output_shape = (
             self.kernel_num,
@@ -165,16 +165,16 @@ class Convolution:
 
         fan_in = np.prod(self.true_kernel_shape) / self.kernel_num
         weight_limit = np.sqrt(6.0 / fan_in)
-        self.kernels = np.random.uniform(-weight_limit, weight_limit, self.true_kernel_shape).astype(dtype)
+        self.kernels = np.random.uniform(-weight_limit, weight_limit, self.true_kernel_shape).astype(dtype, copy=False)
         self.biases = np.zeros(self.kernel_num, dtype=dtype)
 
         self.kernels_gradient = np.zeros_like(self.kernels)
         self.bias_gradient = np.zeros_like(self.biases)
 
         self.kernel_optimizer = optimizer(*optimizer_args)
-        self.kernel_optimizer.initialize(self.kernels, dtype=dtype)
+        self.kernel_optimizer.initialize(self.kernels, dtype=optimizer_dtype)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=optimizer_dtype)
 
     def predict(self, prev_layer_activation):
         z, a = self.forward_pass(prev_layer_activation)
@@ -265,7 +265,7 @@ class MaxPooling:
         self.stride = stride
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (
             previous_layer_output_shape[0],
             (previous_layer_output_shape[1] - self.kernel_shape[0]) // self.stride + 1,
@@ -324,14 +324,14 @@ class Embedding:
         self.weights_optimizer = None
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         in_num = np.prod(previous_layer_output_shape)
         out_num = self.neuron_num
         weight_limit = math.sqrt(6 / (in_num + out_num))
-        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.vocab_size, self.neuron_num)).astype(dtype)
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(self.vocab_size, self.neuron_num)).astype(dtype, copy=False)
         self.gradient = np.zeros_like(self.weights)
         self.weights_optimizer = optimizer(*optimizer_args)
-        self.weights_optimizer.initialize(self.weights, dtype=dtype)
+        self.weights_optimizer.initialize(self.weights, dtype=optimizer_dtype)
 
         self.output_shape = (*previous_layer_output_shape, self.neuron_num)
 
@@ -350,6 +350,7 @@ class Embedding:
 
     def backwards_pass(self, prev_layer_a, this_layer_z, dc_da):
         # self.gradient[prev_layer_a.reshape(self.input_shape)] += dc_dz
+        dc_da = dc_da.astype(self.weights.dtype, copy=False)
         np.add.at(self.gradient, prev_layer_a, dc_da)
         # self.gradient[prev_layer_a] += dc_dz
 
@@ -372,7 +373,9 @@ class Embedding:
         return np.sum(self.gradient * self.gradient)
 
     def set_weights_dtype(self, dtype):
-        self.weights = self.weights.astype(dtype)
+        self.weights = self.weights.astype(dtype, copy=False)
+        self.weights_optimizer.set_weights(self.weights)
+        self.gradient = self.gradient.astype(dtype, copy=False)
 
     def get_weights(self):
         return [self.weights]
@@ -401,7 +404,7 @@ class Dropout:
         self.__dict__.update(state)
         self.rng = np.random.default_rng()
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.input_shape = previous_layer_output_shape
         self.input_num = np.prod(self.input_shape)
 
@@ -430,7 +433,7 @@ class Dropout:
         return 0
 
     def get_norm(self):
-        pass
+        return 0
 
     def set_weights_dtype(self, dtype):
         return
@@ -461,7 +464,7 @@ class Recurrent:
 
         self.this_layer_a = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         if self.input_shape is None:
             self.input_shape = previous_layer_output_shape
 
@@ -474,12 +477,12 @@ class Recurrent:
         self.hidden_weights = np.random.uniform(-weight_limit, weight_limit, size=(out_num, out_num))
         self.hidden_gradient = np.zeros_like(self.hidden_weights)
         self.hidden_optimizer = optimizer(*optimizer_args)
-        self.hidden_optimizer.initialize(self.hidden_weights, dtype=dtype)
+        self.hidden_optimizer.initialize(self.hidden_weights, dtype=optimizer_dtype)
 
         self.input_weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num))
         self.input_gradient = np.zeros_like(self.input_weights)
         self.input_optimizer = optimizer(*optimizer_args)
-        self.input_optimizer.initialize(self.input_weights, dtype=dtype)
+        self.input_optimizer.initialize(self.input_weights, dtype=optimizer_dtype)
 
     def predict(self, prev_layer_activation):
         z_data, a_data = self.forward_pass(prev_layer_activation)
@@ -599,11 +602,11 @@ class Loop:
         self.z_data = None
         self.a_data = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         loop_num = previous_layer_output_shape[0]
         previous_layer_output_shape = previous_layer_output_shape[1:]
         for layer in self.layers:
-            layer.init_weights(previous_layer_output_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            layer.init_weights(previous_layer_output_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args, optimizer_dtype=optimizer_dtype)
             previous_layer_output_shape = layer.get_output_shape()
         self.output_shape = (loop_num, *self.layers[-1].get_output_shape())
 
@@ -667,7 +670,7 @@ class Stack:
         self.stack_size = stack_size
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (previous_layer_output_shape[0], self.stack_size, *previous_layer_output_shape[1:])
 
     def predict(self, prev_layer_activation):
@@ -724,6 +727,7 @@ class Attention:
 
         self.key_cache = []
         self.value_cache = []
+        self.position = 0
 
         self.use_kv_cache = use_kv_cache
         self.use_rope = use_rope
@@ -731,7 +735,7 @@ class Attention:
         if self.use_rope and not self.query_key_size % 2 == 0:
             raise ValueError("RoPE encoding requires query key dimension to be even.")
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         in_num = previous_layer_output_shape[1]
 
         self.output_shape = (previous_layer_output_shape[0], self.heads * self.value_size)
@@ -739,9 +743,9 @@ class Attention:
         weight_limit_qk = math.sqrt(6 / (in_num + self.query_key_size))
         weight_limit_v = math.sqrt(6 / (in_num + self.value_size))
 
-        self.key_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size)).astype(dtype)
-        self.query_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size)).astype(dtype)
-        self.value_weights = np.random.uniform(-weight_limit_v, weight_limit_v, (self.heads, previous_layer_output_shape[1], self.value_size)).astype(dtype)
+        self.key_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size)).astype(dtype, copy=False)
+        self.query_weights = np.random.uniform(-weight_limit_qk, weight_limit_qk, (self.heads, previous_layer_output_shape[1], self.query_key_size)).astype(dtype, copy=False)
+        self.value_weights = np.random.uniform(-weight_limit_v, weight_limit_v, (self.heads, previous_layer_output_shape[1], self.value_size)).astype(dtype, copy=False)
 
         self.key_gradient = np.zeros_like(self.key_weights)
         self.query_gradient = np.zeros_like(self.query_weights)
@@ -750,21 +754,32 @@ class Attention:
         self.key_optimizer = optimizer(*optimizer_args)
         self.query_optimizer = optimizer(*optimizer_args)
         self.value_optimizer = optimizer(*optimizer_args)
-        self.key_optimizer.initialize(self.key_weights, dtype=dtype)
-        self.query_optimizer.initialize(self.query_weights, dtype=dtype)
-        self.value_optimizer.initialize(self.value_weights, dtype=dtype)
+        self.key_optimizer.initialize(self.key_weights, dtype=optimizer_dtype)
+        self.query_optimizer.initialize(self.query_weights, dtype=optimizer_dtype)
+        self.value_optimizer.initialize(self.value_weights, dtype=optimizer_dtype)
 
         self.scale = self.scale.astype(dtype)
 
     def clear_cache(self):
         self.key_cache = []
         self.value_cache = []
+        self.position = 0
 
     def predict_cache(self, new_token):
+        self.position += 1
+
         # Dim (b, h, t, v/q/k), t will only be length 1 (as only 1 new token per predict)
         query = np.einsum('bti,hiv->bhtv', new_token, self.query_weights)
         key = np.einsum('bti,hiv->bhtv', new_token, self.key_weights)
         value = np.einsum('bti,hiv->bhtv', new_token, self.value_weights)
+
+        if self.use_rope:
+            angles = np.outer(np.array([self.position]), np.power(1 / 10000, (2 / self.query_key_size) * np.arange(self.query_key_size // 2)))
+
+            cos = np.cos(angles)[np.newaxis, np.newaxis, :, :]
+            sin = np.sin(angles)[np.newaxis, np.newaxis, :, :]
+
+            query, key = self.apply_rotation(query, key, cos, sin)
 
         self.key_cache += [key[:, :, ti, :] for ti in range(key.shape[2])]
         self.value_cache += [value[:, :, ti, :] for ti in range(value.shape[2])]
@@ -818,6 +833,7 @@ class Attention:
         # global forward_attention
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        prev_layer_activation = prev_layer_activation.astype(self.key_weights.dtype, copy=False)
         t = prev_layer_activation.shape[1]
 
         # Shape (head, time, query/key/value size)
@@ -868,6 +884,9 @@ class Attention:
         # global backward_attention
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        dc_da = dc_da.astype(self.key_weights.dtype, copy=False)
+        prev_layer_a = prev_layer_a.astype(self.key_weights.dtype, copy=False)
+
         queries, keys, values, attention_scores, cos, sin = this_layer_z
         b = prev_layer_a.shape[0]
         t = prev_layer_a.shape[1]
@@ -908,7 +927,6 @@ class Attention:
         self.key_gradient += np.einsum('bti,bhtk->hik', prev_layer_a, dc_dkey)
 
         new_dc_da = np.sum(np.einsum('bhtv,hiv->bhti', dc_dv, self.value_weights) + np.einsum('bhtq,hiq->bhti', dc_dquery, self.query_weights) + np.einsum('bhtk,hik->bhti', dc_dkey, self.key_weights), axis=1)
-
         # np.cuda.Stream.null.synchronize()
         # backward_attention += time.perf_counter() - t0
         return new_dc_da
@@ -937,9 +955,15 @@ class Attention:
         return np.sum(self.value_gradient * self.value_gradient) + np.sum(self.query_gradient * self.query_gradient) + np.sum(self.key_gradient * self.key_gradient)
 
     def set_weights_dtype(self, dtype):
-        self.key_weights = self.key_weights.astype(dtype)
-        self.query_weights = self.query_weights.astype(dtype)
-        self.value_weights = self.value_weights.astype(dtype)
+        self.key_weights = self.key_weights.astype(dtype, copy=False)
+        self.query_weights = self.query_weights.astype(dtype, copy=False)
+        self.value_weights = self.value_weights.astype(dtype, copy=False)
+        self.key_optimizer.set_weights(self.key_weights)
+        self.query_optimizer.set_weights(self.query_weights)
+        self.value_optimizer.set_weights(self.value_weights)
+        self.key_gradient = self.key_gradient.astype(dtype, copy=False)
+        self.query_gradient = self.query_gradient.astype(dtype, copy=False)
+        self.value_gradient = self.value_gradient.astype(dtype, copy=False)
 
     def get_weights(self):
         return [self.key_weights, self.query_weights, self.value_weights]
@@ -967,7 +991,7 @@ class TimeDistributedDense:
 
         self.has_activation = self.activation_function is not None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (previous_layer_output_shape[0], self.neuron_num)
 
         previous_layer_output_shape = previous_layer_output_shape[1:]
@@ -975,15 +999,15 @@ class TimeDistributedDense:
         out_num = self.neuron_num
         weight_limit = math.sqrt(6 / (in_num + out_num))
 
-        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype)
+        self.weights = np.random.uniform(-weight_limit, weight_limit, size=(in_num, out_num)).astype(dtype, copy=False)
         self.gradient = np.zeros_like(self.weights)
         self.weight_optimizer = optimizer(*optimizer_args)
-        self.weight_optimizer.initialize(self.weights, dtype=dtype)
+        self.weight_optimizer.initialize(self.weights, dtype=optimizer_dtype)
 
         self.biases = np.zeros(out_num, dtype=dtype)
         self.bias_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=optimizer_dtype)
 
         if optimizer is optimizers.AdamW:
             self.bias_optimizer.weight_decay = 0
@@ -993,6 +1017,7 @@ class TimeDistributedDense:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
+        prev_layer_activation = prev_layer_activation.astype(self.weights.dtype, copy=False)
         # Reshape to 2d for faster GPU training
         original_shape = prev_layer_activation.shape
         prev_layer_2d = np.reshape(prev_layer_activation, (-1, self.weights.shape[0]))
@@ -1011,6 +1036,7 @@ class TimeDistributedDense:
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
         z_data, prev_layer_2d = this_layer_z
+        dc_da = dc_da.astype(self.weights.dtype, copy=False)
         if not self.has_activation:
             dc_dz = dc_da
         elif self.activation_function.is_elementwise:
@@ -1050,8 +1076,12 @@ class TimeDistributedDense:
         return np.sum(self.gradient * self.gradient) + np.sum(self.bias_gradient * self.bias_gradient)
 
     def set_weights_dtype(self, dtype):
-        self.weights = self.weights.astype(dtype)
-        self.biases = self.biases.astype(dtype)
+        self.weights = self.weights.astype(dtype, copy=False)
+        self.biases = self.biases.astype(dtype, copy=False)
+        self.weight_optimizer.set_weights(self.weights)
+        self.bias_optimizer.set_weights(self.biases)
+        self.gradient = self.gradient.astype(dtype, copy=False)
+        self.bias_gradient = self.bias_gradient.astype(dtype, copy=False)
 
     def get_weights(self):
         return [self.weights, self.biases]
@@ -1065,7 +1095,7 @@ class Sum:
     def __init__(self):
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = previous_layer_output_shape[1:]
 
     def predict(self, prev_layer_activation):
@@ -1095,7 +1125,7 @@ class Flatten:
         self.input_shape = None
         self.output_size = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.input_shape = previous_layer_output_shape
         self.output_size = np.prod(previous_layer_output_shape)
 
@@ -1125,7 +1155,7 @@ class Reshape:
     def __init__(self, shape):
         self.output_shape = shape
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         pass
 
     def predict(self, prev_layer_activation):
@@ -1155,9 +1185,9 @@ class ResidualBlock:
         self.layers = layers
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         for layer in self.layers:
-            layer.init_weights(previous_layer_output_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            layer.init_weights(previous_layer_output_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args, optimizer_dtype=optimizer_dtype)
             previous_layer_output_shape = layer.get_output_shape()
         self.output_shape = self.layers[-1].get_output_shape()
 
@@ -1238,19 +1268,19 @@ class LayerNorm:
         self.output_shape = None
         self.axis = axis
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         in_shape = tuple(previous_layer_output_shape[a] for a in self.axis)
         self.output_shape = previous_layer_output_shape
 
         self.weights = np.ones(in_shape, dtype=dtype)
         self.weights_gradient = np.zeros_like(self.weights)
         self.weights_optimizer = optimizer(*optimizer_args)
-        self.weights_optimizer.initialize(self.weights, dtype=dtype)
+        self.weights_optimizer.initialize(self.weights, dtype=optimizer_dtype)
 
         self.biases = np.zeros(in_shape, dtype=dtype)
         self.biases_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=optimizer_dtype)
 
         if optimizer is optimizers.AdamW:
             self.weights_optimizer.weight_decay = 0
@@ -1264,6 +1294,8 @@ class LayerNorm:
         # global forward_norm
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        prev_layer_activation = prev_layer_activation.astype(self.weights.dtype, copy=False)
+
         dif_mean = (prev_layer_activation - prev_layer_activation.mean(axis=self.axis, keepdims=True))
         var = (dif_mean * dif_mean).mean(axis=self.axis, keepdims=True)
         inv_std = 1 / np.sqrt(var + self.epsilon)
@@ -1280,6 +1312,8 @@ class LayerNorm:
         # global backward_norm
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        dc_da = dc_da.astype(self.weights.dtype, copy=False)
+
         inv_std, quotient = this_layer_z
 
         param_axis = tuple(i for i in range(dc_da.ndim) if i not in self.axis)
@@ -1320,8 +1354,12 @@ class LayerNorm:
         return np.sum(self.weights_gradient * self.weights_gradient) + np.sum(self.biases_gradient * self.biases_gradient)
 
     def set_weights_dtype(self, dtype):
-        self.weights = self.weights.astype(dtype)
-        self.biases = self.biases.astype(dtype)
+        self.weights = self.weights.astype(dtype, copy=False)
+        self.biases = self.biases.astype(dtype, copy=False)
+        self.weights_optimizer.set_weights(self.weights)
+        self.bias_optimizer.set_weights(self.biases)
+        self.weights_gradient = self.weights_gradient.astype(dtype, copy=False)
+        self.biases_gradient = self.biases_gradient.astype(dtype, copy=False)
 
     def get_weights(self):
         return [self.weights, self.biases]
@@ -1336,7 +1374,7 @@ class PositionalEncoder:
         self.output_shape = None
         self.pos = 0
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = previous_layer_output_shape
 
     def clear_cache(self):
@@ -1392,13 +1430,13 @@ class EmbeddingTiedOutput:
 
         self.has_activation = self.activation_function is not None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (previous_layer_output_shape[0], self.neuron_num)
 
         self.biases = np.zeros(self.neuron_num, dtype=dtype)
         self.bias_gradient = np.zeros_like(self.biases)
         self.bias_optimizer = optimizer(*optimizer_args)
-        self.bias_optimizer.initialize(self.biases, dtype=dtype)
+        self.bias_optimizer.initialize(self.biases, dtype=optimizer_dtype)
 
         if optimizer is optimizers.AdamW:
             self.bias_optimizer.weight_decay = 0
@@ -1412,6 +1450,7 @@ class EmbeddingTiedOutput:
         return a_data
 
     def forward_pass(self, prev_layer_activation):
+        prev_layer_activation = prev_layer_activation.astype(self.biases.dtype, copy=False)
         # Reshape to 2d for faster GPU training
         original_shape = prev_layer_activation.shape
         prev_layer_2d = np.reshape(prev_layer_activation, (-1, self.weights.shape[0]))
@@ -1429,6 +1468,7 @@ class EmbeddingTiedOutput:
         # global backward_dense
         # np.cuda.Stream.null.synchronize()
         # t0 = time.perf_counter()
+        dc_da = dc_da.astype(self.biases.dtype, copy=False)
         z_data, prev_layer_2d = this_layer_z
         if not self.has_activation:
             dc_dz = dc_da
@@ -1467,8 +1507,9 @@ class EmbeddingTiedOutput:
 
     # Decouples from embedding layer
     def set_weights_dtype(self, dtype):
-        self.weights = self.weights.astype(dtype)
-        self.biases = self.biases.astype(dtype)
+        self.biases = self.biases.astype(dtype, copy=False)
+        self.bias_optimizer.set_weights(self.biases)
+        self.bias_gradient = self.bias_gradient.astype(dtype, copy=False)
 
     def get_weights(self):
         return [self.biases]
@@ -1488,7 +1529,7 @@ class Transpose:
 
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = [0] * len(previous_layer_output_shape)
         for i in range(1, len(self.axes)):
             self.output_shape[i - 1] = previous_layer_output_shape[self.axes[i] - 1]
@@ -1521,7 +1562,7 @@ class ActivationFunction:
         self.activation_function = activation_function
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = previous_layer_output_shape
 
     def predict(self, prev_layer_activation):
@@ -1555,7 +1596,7 @@ class Mean:
         self.output_shape = None
         self.axis = axis
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         remove = {i % len(previous_layer_output_shape) for i in self.axis}
 
         self.output_shape = tuple(x for i, x in enumerate(previous_layer_output_shape) if i not in remove)
@@ -1600,7 +1641,7 @@ class ReshapeOnAxis:
         self.new_shape = shape
         self.axis = axis
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         self.output_shape = (*previous_layer_output_shape[:self.axis], *self.new_shape, *previous_layer_output_shape[self.axis + 1:])
 
     def predict(self, prev_layer_activation):
@@ -1648,7 +1689,7 @@ class Split:
         self.output_partition = None
         self.output_shape = None
 
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         if self.partition < 0:
             self.partition = previous_layer_output_shape[self.axis] + 1 + self.partition
         before_shape = previous_layer_output_shape[:self.axis] + (self.partition,) + previous_layer_output_shape[self.axis + 1:]
@@ -1656,12 +1697,12 @@ class Split:
 
         before_layer_inp_shape = before_shape
         for layer in self.before_layers:
-            layer.init_weights(before_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            layer.init_weights(before_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args, optimizer_dtype=optimizer_dtype)
             before_layer_inp_shape = layer.get_output_shape()
 
         after_layer_inp_shape = after_shape
         for layer in self.after_layers:
-            layer.init_weights(after_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+            layer.init_weights(after_layer_inp_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args, optimizer_dtype=optimizer_dtype)
             after_layer_inp_shape = layer.get_output_shape()
 
         if not (len(before_layer_inp_shape) == len(after_layer_inp_shape) and
@@ -1750,7 +1791,7 @@ class Parallel:
         self.output_shape = None
 
     # Expects previous_layer_output_shape to be a list of tuples
-    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=()):
+    def init_weights(self, previous_layer_output_shape, optimizer, dtype=np.float32, optimizer_args=(), optimizer_dtype=np.float32):
         if len(previous_layer_output_shape) != len(self.layers_list):
             raise ValueError("Parallel requires one input shape per branch.")
 
@@ -1758,7 +1799,7 @@ class Parallel:
         for i, layers in enumerate(self.layers_list):
             out_shape = previous_layer_output_shape[i]
             for layer in layers:
-                layer.init_weights(out_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args)
+                layer.init_weights(out_shape, optimizer, dtype=dtype, optimizer_args=optimizer_args, optimizer_dtype=optimizer_dtype)
                 out_shape = layer.get_output_shape()
 
             if total_out_shape is not None and out_shape != total_out_shape:

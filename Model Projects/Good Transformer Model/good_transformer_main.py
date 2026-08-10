@@ -2,6 +2,7 @@ import numpy as np
 import math
 from scratch_model import *
 from dataset import FineWebConfig, prepare_fineweb
+from tokenizers import Tokenizer
 import cupy as cp
 import csv
 from pathlib import Path
@@ -121,10 +122,10 @@ def main():
     # )
 
     version = "v1"
-    step = 48008
+    step = 76012
 
     language_model = Model.load(f"Models/transformer_{version}_{step}")
-    # language_model.set_weights_dtype(cp.float32)
+    # language_model.set_weights_dtype(cp.float16)
     # language_model.set_layer_type_dtype(layers.LayerNorm, cp.float32)
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
@@ -239,4 +240,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Model.plot_csv("Loss/transformer_v1_test_data.csv", ema_span=1)
+    # Model.plot_csv("Loss/transformer_v1_train_data.csv", ema_span=1000)

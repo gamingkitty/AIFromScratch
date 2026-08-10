@@ -964,6 +964,7 @@ class Attention:
         self.key_gradient = self.key_gradient.astype(dtype, copy=False)
         self.query_gradient = self.query_gradient.astype(dtype, copy=False)
         self.value_gradient = self.value_gradient.astype(dtype, copy=False)
+        self.scale = self.scale.astype(dtype)
 
     def get_weights(self):
         return [self.key_weights, self.query_weights, self.value_weights]

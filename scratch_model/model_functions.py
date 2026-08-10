@@ -68,11 +68,13 @@ def f_derivative(x):
 
 
 def softmax_vectorized(x):
+    x = x.astype(np.float32, copy=False)
     e_xs = np.exp(x - np.max(x, axis=2, keepdims=True))
     return e_xs / np.sum(e_xs, axis=2, keepdims=True)
 
 
 def softmax_vectorized_derivative(x):
+    x = x.astype(np.float32, copy=False)
     softmax_vals = softmax_vectorized(x)
     b, n, m = softmax_vals.shape
     idx = np.arange(m)

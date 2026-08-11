@@ -30,6 +30,17 @@ def accuracy_function(prediction, label):
     return (cp.sum((cp.argmax(prediction, axis=-1) == label)) / prediction.shape[1]).item()
 
 
+def set_dropout_percent(l_model, dropout_percent):
+    def layer_set_dropout_percent(model_layers):
+        for layer in model_layers:
+            if hasattr(layer, 'layers'):
+                layer_set_dropout_percent(layer.layers)
+            elif isinstance(layer, layers.Dropout):
+                layer.set_dropout_percent(dropout_percent)
+
+    layer_set_dropout_percent(l_model.layers)
+
+
 def lr_percent_cosine_step(step, total_steps=62538, warmup_steps=2000, min_percent=0.05):
     if total_steps <= 1:
         return 1.0
@@ -122,12 +133,14 @@ def main():
     # )
 
     version = "v1"
-    step = 76012
+    step = 87250
 
     language_model = Model.load(f"Models/transformer_{version}_{step}")
     # language_model.set_weights_dtype(cp.float16)
     # language_model.set_layer_type_dtype(layers.LayerNorm, cp.float32)
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
+
+    set_dropout_percent(language_model, 0.0)
 
     in_between_step = 0
 

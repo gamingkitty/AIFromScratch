@@ -1,2 +1,3 @@
 Step 22581 - Attempted switch to mixed precision but didn't work. May affect loss slightly on graph?
 Step 50524 - Fixed f16 mixed precision bug and attempted conversion, but caused loss to jump by about 0.1, so reverted.
+Step 87250 - Testing removing dropout to see if it improves training speed.

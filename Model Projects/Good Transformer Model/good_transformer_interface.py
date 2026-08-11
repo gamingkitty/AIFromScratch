@@ -87,7 +87,7 @@ def sample_with_temperature(
 
 
 def main():
-    language_model = Model.load(f"Models/transformer_v1_76012")
+    language_model = Model.load(f"Models/transformer_v1_87250")
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     enable_kv_cache(language_model)

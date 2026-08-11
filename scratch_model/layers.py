@@ -408,6 +408,10 @@ class Dropout:
         self.input_shape = previous_layer_output_shape
         self.input_num = np.prod(self.input_shape)
 
+    def set_dropout_percent(self, dropout_percent):
+        self.dropout_percent = dropout_percent
+        self.scale = 1 / (1 - dropout_percent)
+
     def predict(self, prev_layer_activation):
         return prev_layer_activation
 

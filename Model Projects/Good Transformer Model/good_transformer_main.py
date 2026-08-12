@@ -133,14 +133,14 @@ def main():
     # )
 
     version = "v1"
-    step = 87250
+    step = 90039
 
     language_model = Model.load(f"Models/transformer_{version}_{step}")
     # language_model.set_weights_dtype(cp.float16)
     # language_model.set_layer_type_dtype(layers.LayerNorm, cp.float32)
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
-    set_dropout_percent(language_model, 0.0)
+    # set_dropout_percent(language_model, 0.0)
 
     in_between_step = 0
 
@@ -253,4 +253,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Model.plot_csv("Loss/transformer_v1_train_data.csv", ema_span=1000)
+    # Model.plot_csv("Loss/transformer_v1_test_data.csv", ema_span=1)

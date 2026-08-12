@@ -58,9 +58,11 @@ def plot_training_csv(path, ema_span=100, rate_ema_span=200):
     axes[2].set_title("Learning Rate vs Step")
     axes[2].legend()
 
+    print(np.array(df["accuracy"][-1000:-1]).mean())
+
     fig.tight_layout()
     plt.show()
 
 
 if __name__ == "__main__":
-    plot_training_csv("Data/cifar_100_v2", ema_span=100)
+    plot_training_csv("Data/cifar_100_v1_extra_200_epochs", ema_span=100)

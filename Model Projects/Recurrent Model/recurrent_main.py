@@ -71,16 +71,14 @@ def load_tinychat(cache_path="tinychat_indices.npz"):
 
 
 def load_tinychat_topk(max_vocab: int = 1000, cache_path: str = "tinychat_topk_indices.npz"):
-    # Fast path: load cached
     if os.path.exists(cache_path):
         cache = np.load(cache_path, allow_pickle=True)
         return list(cache["data"]), list(cache["labels"]), list(cache["vocab"])
 
     ds = load_dataset("starhopp3r/TinyChat", split="train")
 
-    # 1) Tokenize + count frequencies in one pass (streaming to save RAM)
     freq = Counter()
-    conversations = []  # store tokenized convs; if memory is tight, chunk this
+    conversations = []
     for ex in ds:
         text = ex["text"]
         if not text or not text.strip():
@@ -91,9 +89,7 @@ def load_tinychat_topk(max_vocab: int = 1000, cache_path: str = "tinychat_topk_i
         conversations.append(toks)
         freq.update(toks)
 
-    # 2) Build capped vocab with UNK and required specials
-    specials = ["<unk>", "[inst]", "[/inst]"]  # ensure these exist
-    # Remove specials from freq before selecting top-K so they don't get double-counted
+    specials = ["<unk>", "[inst]", "[/inst]"]
     for s in specials:
         if s in freq:
             del freq[s]
@@ -104,7 +100,6 @@ def load_tinychat_topk(max_vocab: int = 1000, cache_path: str = "tinychat_topk_i
     token_to_index = {t: i for i, t in enumerate(vocab)}
     unk_id = token_to_index["<unk>"]
 
-    # 3) Encode each conversation to indices (no one-hot here)
     data, labels = [], []
     for toks in conversations:
         ids = np.fromiter((token_to_index.get(t, unk_id) for t in toks), dtype=np.int32)
@@ -113,7 +108,6 @@ def load_tinychat_topk(max_vocab: int = 1000, cache_path: str = "tinychat_topk_i
         data.append(ids[:-1])
         labels.append(ids[1:])
 
-    # 4) Cache to disk (indices only → tiny + fast)
     np.savez_compressed(
         cache_path,
         data=np.array(data, dtype=object),
@@ -181,7 +175,7 @@ def main():
         model_functions.cross_entropy,
         (-1,),
         [
-            layers.Embedding(256, vocab_size, model_functions.linear),
+            layers.Embedding(256, vocab_size),
             # layers.Attention(512, 512),
             # layers.Attention(256, 256),
             layers.Recurrent(128, model_functions.relu),

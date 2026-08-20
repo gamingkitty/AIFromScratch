@@ -770,8 +770,6 @@ class Attention:
         self.position = 0
 
     def predict_cache(self, new_token):
-        self.position += 1
-
         # Dim (b, h, t, v/q/k), t will only be length 1 (as only 1 new token per predict)
         query = np.einsum('bti,hiv->bhtv', new_token, self.query_weights)
         key = np.einsum('bti,hiv->bhtv', new_token, self.key_weights)
@@ -803,6 +801,8 @@ class Attention:
         # Dim (b, h, 1, v), 1 for time dimension
         output = np.einsum('bhts,bhsv->bhtv', new_token_attention_scores, v_cache)
         output = output.transpose(0, 2, 1, 3).reshape(output.shape[0], output.shape[2], -1)
+
+        self.position += 1
         return output
 
     def predict(self, prev_layer_activation):

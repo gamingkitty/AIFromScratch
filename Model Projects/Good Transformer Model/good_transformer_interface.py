@@ -87,7 +87,7 @@ def sample_with_temperature(
 
 
 def main():
-    language_model = Model.load(f"Models/transformer_v1_90039")
+    language_model = Model.load(f"Models/transformer_v1_132297")
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     enable_kv_cache(language_model)
@@ -116,9 +116,9 @@ def main():
         next_token = sample_with_temperature(
             cp.asnumpy(pred[0][0]),
             temperature=0.7,
-            repetition_penalty=1.08,
+            repetition_penalty=1.15,
             recent_tokens=generated_tokens[-64:],
-            top_p=0.95,
+            top_p=0.9,
         )
         generated_tokens.append(next_token)
         print(tokenizer.decode([int(next_token)]), end="")

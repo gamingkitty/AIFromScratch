@@ -133,7 +133,7 @@ def main():
     # )
 
     version = "v1"
-    step = 90039
+    step = 134638
 
     language_model = Model.load(f"Models/transformer_{version}_{step}")
     # language_model.set_weights_dtype(cp.float16)
@@ -253,4 +253,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Model.plot_csv("Loss/transformer_v1_test_data.csv", ema_span=1)
+    # Model.plot_csv("Loss/transformer_v1_train_data.csv", ema_span=200)

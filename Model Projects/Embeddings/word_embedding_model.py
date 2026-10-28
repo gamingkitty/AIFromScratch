@@ -95,7 +95,7 @@ def main():
     #     layers.Dense(vocab_size, model_functions.softmax)
     # )
 
-    embedding_model = model.Model.load("C:\\Users\\brier\\PycharmProjects\\AIFromScratch\\Model Projects\\Transformer Models\\Models\\tinychat_e1_tinychat_tied_0005lr_0001wd_24400.pkl")
+    # embedding_model = model.Model.load("C:\\Users\\brier\\PycharmProjects\\AIFromScratch\\Model Projects\\Transformer Models\\Models\\tinychat_e1_tinychat_tied_0005lr_0001wd_24400.pkl")
 
     embedding_weights = embedding_model.layers[0].weights
 

@@ -199,7 +199,7 @@ def yolo_out_softmax_classes_derivative(x):
 
 # Lambda parameters define scale of individual loss components
 # Input expected: (Batch, Spatial, Spatial, Anchors, (Objectiveness, x, y, h, w, classes))
-def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=2.0, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=0.5, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 
@@ -212,8 +212,9 @@ def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=2.0
     num_pos = np.maximum(1.0, np.sum(pos_mask, axis=(1, 2, 3), keepdims=True))
     num_neg = np.maximum(1.0, np.sum(neg_mask, axis=(1, 2, 3), keepdims=True))
 
+    # Binary cross entropy loss for detecting objectiveness/whether there is an object in each cell. Split so they can be
+    # weighted differently.
     obj_loss = -np.sum(pos_mask * np.log(obj_pred) / num_pos, axis=(1, 2, 3))
-
     noobj_loss = -np.sum(neg_mask * np.log(1 - obj_pred) / num_neg, axis=(1, 2, 3))
 
     box_loss = np.sum(pos_mask[..., None] * (output[..., 1:5] - expected[..., 1:5]) ** 2 / num_pos[..., None], axis=(1, 2, 3, 4))
@@ -226,7 +227,7 @@ def yolo_loss_softmax_classes(output, expected, lambda_obj=1.0, lambda_noobj=2.0
     return np.sum(lambda_obj * obj_loss + lambda_noobj * noobj_loss + lambda_box * box_loss + lambda_class * class_loss)
 
 
-def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=2.0, lambda_box=5.0, lambda_class=1.0):
+def yolo_loss_softmax_classes_derivative(output, expected, lambda_obj=1.0, lambda_noobj=0.5, lambda_box=5.0, lambda_class=1.0):
     eps = 1e-7
     output_clipped = np.clip(output, eps, 1 - eps)
 

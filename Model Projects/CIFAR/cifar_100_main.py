@@ -1,6 +1,7 @@
 from keras.datasets import cifar100
 import cupy as cp
 import numpy as np
+from scratch_model import *
 import math
 
 
@@ -100,6 +101,8 @@ def create_block(d_model, d_feed_forward, heads):
 
 
 def main():
+    tr_images, tr_labels, te_images, te_labels = load_cifar100()
+
     train_labels = np.eye(100)[tr_labels]
     test_labels = np.eye(100)[te_labels]
 
@@ -173,6 +176,7 @@ def main():
                 for _ in range(blocks)
                 for layer in create_block(d_model, d_feed_forward, heads)
             ],
+
             # Shape (64, 128)
             layers.Flatten(),
 
@@ -208,10 +212,6 @@ def main():
     print(f"Final accuracy: {accuracy * 100:.4f}%, final loss: {loss:.6f}")
 
 
-tr_images, tr_labels, te_images, te_labels = load_cifar100()
-
-from scratch_model import *
-import numpy as np
 if __name__ == "__main__":
     main()
 

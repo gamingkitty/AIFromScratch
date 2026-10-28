@@ -14,5 +14,11 @@ Some of the projects I've attempted so far include:
 - Training basic dense models on MNSIT
 - Training convolution models to around 85% accuracy on CIFAR-10 and 60% accuracy on CIFAR-100
 - Training a 25m parameter model on the tinychat dataset
-- Pre-training a 50m parameter transformer model on FineWeb-Edu (About 2.98 validation loss with vocab size 12000 after about 2.4b tokens of training)
+- Pre-training a 50m parameter transformer model on FineWeb-Edu (About 2.92 validation loss with vocab size 12000 after about 2.5b tokens of training)
 - Attempting to make a YOLO model (still a work in progress)
+
+Here are the plots of loss and accuracy during the pre-training of the 50m parameter transformer:
+Validation (Every 2000 steps):
+![transformer_v1_test_plot.png](Model%20Projects/Good%20Transformer%20Model/Loss/transformer_v1_test_plot.png)
+Train:
+![transformer_v1_train_plot.png](Model%20Projects/Good%20Transformer%20Model/Loss/transformer_v1_train_plot.png)

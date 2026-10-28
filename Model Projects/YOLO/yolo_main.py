@@ -223,10 +223,12 @@ def main():
             conv(1024, 3, 2), *csp_block(1024, num_inner_convs=2),
 
             conv(512, 3, 1),
+            # (512, in_h / 32, in_w / 32)
 
             layers.Convolution(1 * (80 + 5), (1, 1)),
+            # (85, in_h / 32, in_w / 32)
 
-            # Reshape and transpose to output shape: (in_h / 32, in_2 / 32, 3, 85)
+            # Reshape and transpose to output shape: (in_h / 32, in_w / 32, 3, 85)
             layers.ReshapeOnAxis((1, 85), axis=0),
             layers.Transpose((2, 3, 0, 1)),
             # Apply activation function

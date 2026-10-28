@@ -87,7 +87,7 @@ def sample_with_temperature(
 
 
 def main():
-    language_model = Model.load(f"Models/transformer_v1_132297")
+    language_model = Model.load(f"Models/transformer_v1_143654")
     language_model.layers[-1].set_from_embedding(language_model.layers[0])
 
     enable_kv_cache(language_model)
@@ -111,17 +111,29 @@ def main():
 
     eos_id = tokenizer.token_to_id("<eos>")
 
+
     generated_tokens = []
+    characters_on_line = 0
+    max_chars_per_line = 150
     while len(generated_tokens) < 512 and (len(generated_tokens) == 0 or generated_tokens[-1] != eos_id):
         next_token = sample_with_temperature(
             cp.asnumpy(pred[0][0]),
             temperature=0.7,
             repetition_penalty=1.15,
             recent_tokens=generated_tokens[-64:],
-            top_p=0.9,
+            top_p=0.95,
         )
         generated_tokens.append(next_token)
-        print(tokenizer.decode([int(next_token)]), end="")
+        token_string = tokenizer.decode([int(next_token)])
+        if token_string == "\n":
+            characters_on_line = 0
+        else:
+            characters_on_line += len(token_string)
+        if characters_on_line > max_chars_per_line:
+            print("\n", end="")
+            characters_on_line = 0
+
+        print(token_string, end="")
         pred = language_model.predict(cp.array([[next_token]]))
 
     print()

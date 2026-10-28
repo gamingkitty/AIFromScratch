@@ -252,5 +252,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    # Model.plot_csv("Loss/transformer_v1_train_data.csv", ema_span=200)
+    # main()
+    Model.plot_csv("Loss/transformer_v1_train_data.csv", ema_span=1000, save_file="Loss/transformer_v1_train_plot.png")

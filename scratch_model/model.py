@@ -293,7 +293,7 @@ class Model:
         self.accuracy_data = merged["accuracy"].tolist()
 
     @classmethod
-    def plot_csv(cls, path, ema_span=100):
+    def plot_csv(cls, path, ema_span=100, save_file=None):
         df = pd.read_csv(path).sort_values("step").reset_index(drop=True)
 
         df["ema_loss"] = df["loss"].ewm(span=ema_span, adjust=False).mean()
@@ -314,6 +314,8 @@ class Model:
         axes[1].legend()
 
         fig.tight_layout()
+        if save_file is not None:
+            plt.savefig(save_file)
         plt.show()
 
     def save_weights(self, path):

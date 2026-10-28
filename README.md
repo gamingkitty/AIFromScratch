@@ -18,6 +18,7 @@ Some of the projects I've attempted so far include:
 - Attempting to make a YOLO model (still a work in progress)
 
 Here are the plots of loss and accuracy during the pre-training of the 50m parameter transformer:
+
 Validation (Every 2000 steps):
 ![transformer_v1_test_plot.png](Model%20Projects/Good%20Transformer%20Model/Loss/transformer_v1_test_plot.png)
 Train:
